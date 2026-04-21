@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { MaterialWithTags } from '@/types'
+import { MaterialWithTags, Tag } from '@/types'
 import { cn } from '@/lib/utils'
+
+const DIM_LABELS = { scene: '场景', style: '风格', element: '元素' } as const
 
 export default function ManagePage() {
   const [materials, setMaterials] = useState<MaterialWithTags[]>([])
@@ -13,11 +15,17 @@ export default function ManagePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [showBulkConfirm, setShowBulkConfirm] = useState(false)
+  const [editItem, setEditItem] = useState<MaterialWithTags | null>(null)
+  const [editForm, setEditForm] = useState({ title: '', description: '', source_url: '', source_platform: '' })
+  const [editTags, setEditTags] = useState<string[]>([])
+  const [allTags, setAllTags] = useState<Tag[]>([])
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    import('@/lib/supabase/queries').then(({ getMaterials }) => {
-      getMaterials().then(data => {
+    import('@/lib/supabase/queries').then(({ getMaterials, getAllTags }) => {
+      Promise.all([getMaterials(), getAllTags()]).then(([data, tags]) => {
         setMaterials(data)
+        setAllTags(tags)
         setLoading(false)
       })
     })
@@ -72,6 +80,34 @@ export default function ManagePage() {
       s.has(id) ? s.delete(id) : s.add(id)
       return s
     })
+  }
+
+  const openEdit = (m: MaterialWithTags) => {
+    setEditItem(m)
+    setEditForm({ title: m.title, description: m.description || '', source_url: m.source_url || '', source_platform: m.source_platform || '' })
+    setEditTags((m.tags || []).map(t => t.id))
+  }
+
+  const toggleEditTag = (tagId: string) => {
+    setEditTags(prev => prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId])
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editItem) return
+    setSaving(true)
+    try {
+      const { updateMaterial, updateMaterialTags, getAllTags: _gt } = await import('@/lib/supabase/queries')
+      await Promise.all([
+        updateMaterial(editItem.id, editForm),
+        updateMaterialTags(editItem.id, editTags),
+      ])
+      const updatedTags = allTags.filter(t => editTags.includes(t.id))
+      setMaterials(prev => prev.map(m => m.id === editItem.id ? { ...m, ...editForm, tags: updatedTags } : m))
+      setEditItem(null)
+    } catch (e: any) {
+      alert(e.message)
+    }
+    setSaving(false)
   }
 
   const toggleSelectAll = () => {
@@ -198,12 +234,20 @@ export default function ManagePage() {
               {m.is_featured ? '精选 ✓' : '普通'}
             </button>
 
-            <button
-              onClick={() => setDeleteId(m.id)}
-              className="text-xs text-[#8C8C8C] hover:text-red-500 transition-colors"
-            >
-              删除
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => openEdit(m)}
+                className="text-xs text-[#8C8C8C] hover:text-black transition-colors"
+              >
+                编辑
+              </button>
+              <button
+                onClick={() => setDeleteId(m.id)}
+                className="text-xs text-[#8C8C8C] hover:text-red-500 transition-colors"
+              >
+                删除
+              </button>
+            </div>
           </div>
         ))}
 
@@ -231,6 +275,89 @@ export default function ManagePage() {
                 className="flex-1 h-10 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
               >
                 确认全部删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editItem && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+            <h3 className="text-base font-bold text-[#1A1A1A] mb-4">编辑素材</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-[#8C8C8C] block mb-1">标题</label>
+                <input value={editForm.title} onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))}
+                  className="w-full h-9 px-3 rounded-lg border border-[#EBEBEB] text-sm focus:outline-none focus:border-[#FF2442]" />
+              </div>
+              <div>
+                <label className="text-xs text-[#8C8C8C] block mb-1">描述</label>
+                <textarea value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+                  rows={2} className="w-full px-3 py-2 rounded-lg border border-[#EBEBEB] text-sm focus:outline-none focus:border-[#FF2442] resize-none" />
+              </div>
+              <div>
+                <label className="text-xs text-[#8C8C8C] block mb-1">来源链接</label>
+                <input value={editForm.source_url} onChange={e => setEditForm(p => ({ ...p, source_url: e.target.value }))}
+                  placeholder="https://..." className="w-full h-9 px-3 rounded-lg border border-[#EBEBEB] text-sm focus:outline-none focus:border-[#FF2442]" />
+              </div>
+              <div>
+                <label className="text-xs text-[#8C8C8C] block mb-2">标签</label>
+                <div className="space-y-2">
+                  {(['scene', 'style', 'element'] as const).map(dim => (
+                    <div key={dim}>
+                      <p className="text-[10px] text-[#BDBDBD] mb-1">{DIM_LABELS[dim]}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {allTags.filter(t => t.dimension === dim).map(tag => (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => toggleEditTag(tag.id)}
+                            className="text-[11px] px-2 py-0.5 rounded-full border transition-all"
+                            style={{
+                              backgroundColor: editTags.includes(tag.id) ? (tag.color || '#000') : 'transparent',
+                              color: editTags.includes(tag.id) ? '#fff' : (tag.color || '#666'),
+                              borderColor: tag.color || '#ccc',
+                            }}
+                          >
+                            {tag.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-[#8C8C8C] block mb-1">来源平台</label>
+                <div className="flex gap-2">
+                  {['小红书', 'Pinterest', 'Instagram'].map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setEditForm(prev => ({ ...prev, source_platform: prev.source_platform === p ? '' : p }))}
+                      className={cn(
+                        'flex-1 h-9 rounded-lg border text-sm transition-colors',
+                        editForm.source_platform === p
+                          ? 'bg-black text-white border-black'
+                          : 'border-[#EBEBEB] text-[#8C8C8C] hover:border-black hover:text-black'
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditItem(null)}
+                className="flex-1 h-10 rounded-xl border border-[#EBEBEB] text-sm text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors">
+                取消
+              </button>
+              <button onClick={handleSaveEdit} disabled={saving}
+                className="flex-1 h-10 rounded-xl bg-black text-white text-sm font-semibold hover:bg-[#333] transition-colors disabled:opacity-50">
+                {saving ? '保存中...' : '保存'}
               </button>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { getMaterialById, getMaterials, getAllTags } from '@/lib/supabase/server-queries'
+import { getMaterialById, getMaterials } from '@/lib/supabase/server-queries'
 import { TagDimension } from '@/types'
 
 const DIM_LABEL: Record<TagDimension, string> = {
@@ -19,20 +19,12 @@ export const dynamic = 'force-dynamic'
 export default async function MaterialDetailPage({ params }: Props) {
   const { id } = await params
 
-  const [material, allMaterials, allTags] = await Promise.all([
+  const [material, allMaterials] = await Promise.all([
     getMaterialById(id),
     getMaterials(),
-    getAllTags(),
   ])
 
   if (!material) notFound()
-
-  // Determine the primary dimension from this material's tags
-  const primaryDim: TagDimension =
-    (material.tags?.[0]?.dimension as TagDimension) || 'scene'
-
-  // Tags in that dimension for the top bar
-  const dimTags = allTags.filter(t => t.dimension === primaryDim)
 
   // Group this material's tags by dimension
   const tagsByDim = {
@@ -41,47 +33,35 @@ export default async function MaterialDetailPage({ params }: Props) {
     element: (material.tags || []).filter(t => t.dimension === 'element'),
   }
 
-  // More materials (exclude current)
-  const more = allMaterials.filter(m => m.id !== material.id)
+  // Related: share at least one tag, sorted by most shared tags first
+  const currentTagIds = new Set((material.tags || []).map(t => t.id))
+  const related = allMaterials
+    .filter(m => m.id !== material.id)
+    .map(m => ({
+      ...m,
+      sharedCount: (m.tags || []).filter(t => currentTagIds.has(t.id)).length,
+    }))
+    .filter(m => m.sharedCount > 0)
+    .sort((a, b) => b.sharedCount - a.sharedCount)
+
+  // Fallback: if fewer than 6 related, fill with other materials
+  const related6 = related.slice(0, 12)
+  const fallback = allMaterials
+    .filter(m => m.id !== material.id && !related.some(r => r.id === m.id))
+    .slice(0, Math.max(0, 12 - related6.length))
+
+  const more = [...related6, ...fallback]
 
   const font = '"Helvetica Neue", "PingFang SC", Arial, sans-serif'
 
   return (
     <div style={{ minHeight: '100vh', background: '#fff', fontFamily: font }}>
 
-      {/* Top nav — dimension label + tag row */}
-      <header style={{ borderBottom: '1px solid #e8e8e8' }}>
-        <div style={{ padding: '20px 48px 0' }}>
-          <Link href="/" style={{ textDecoration: 'none' }}>
-            <span style={{ fontSize: '11px', color: '#aaa', letterSpacing: '0.05em' }}>
-              {DIM_LABEL[primaryDim]}
-            </span>
-          </Link>
-        </div>
-        <div style={{ display: 'flex', gap: 0, padding: '0 48px' }}>
-          {dimTags.map(tag => {
-            const active = material.tags?.some(t => t.id === tag.id)
-            return (
-              <Link
-                key={tag.id}
-                href={`/?dim=${primaryDim}&tag=${tag.slug}`}
-                style={{
-                  display: 'inline-block',
-                  padding: '10px 16px 10px 0',
-                  marginRight: '8px',
-                  fontSize: '12px',
-                  color: active ? '#111' : '#bbb',
-                  fontWeight: active ? 500 : 400,
-                  textDecoration: 'none',
-                  borderBottom: active ? '2px solid #111' : '2px solid transparent',
-                  transition: 'color 0.15s',
-                }}
-              >
-                {tag.name}
-              </Link>
-            )
-          })}
-        </div>
+      {/* Top nav — back only */}
+      <header style={{ borderBottom: '1px solid #e8e8e8', padding: '16px 48px' }}>
+        <Link href="/" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#aaa', fontSize: '12px', fontFamily: font }}>
+          ← 返回
+        </Link>
       </header>
 
       {/* Main content */}
@@ -163,9 +143,16 @@ export default async function MaterialDetailPage({ params }: Props) {
       {more.length > 0 && (
         <div style={{ padding: '0 48px 80px', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '32px' }}>
-            <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111', letterSpacing: '-0.02em' }}>
-              Read more
-            </h2>
+            <div>
+              <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111', letterSpacing: '-0.02em' }}>
+                Read more
+              </h2>
+              {related6.length > 0 && (
+                <p style={{ fontSize: '11px', color: '#bbb', marginTop: '4px' }}>
+                  按相关标签推荐 · {related6.length} 个匹配
+                </p>
+              )}
+            </div>
             <span style={{ fontSize: '28px', color: '#ccc', fontWeight: 300 }}>{more.length}</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '16px' }}>

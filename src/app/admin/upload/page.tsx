@@ -13,6 +13,8 @@ interface UploadItem {
   supabaseUrl: string
   title: string
   description: string
+  source_url: string
+  source_platform: string
   selectedTags: string[]
   status: ItemStatus
   error?: string
@@ -54,6 +56,8 @@ export default function UploadPage() {
       supabaseUrl: '',
       title: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
       description: '',
+      source_url: '',
+      source_platform: '',
       selectedTags: [],
       status: 'uploading' as ItemStatus,
     })))
@@ -116,8 +120,8 @@ export default function UploadPage() {
           title: item.title,
           description: item.description,
           image_url: item.supabaseUrl,
-          source_url: '',
-          source_platform: '',
+          source_url: item.source_url,
+          source_platform: item.source_platform,
           is_featured: false,
           tagIds: item.selectedTags,
         })
@@ -313,6 +317,29 @@ function ItemCard({
             placeholder="描述（可选）"
             className="w-full h-7 px-2 border-heavy text-[11px] focus:outline-none focus:bg-[#F8F8F8] bg-white"
           />
+          <div className="flex gap-1.5">
+            <input
+              value={item.source_url}
+              onChange={e => onUpdate({ source_url: e.target.value })}
+              placeholder="来源链接（可选）"
+              className="flex-1 h-7 px-2 border-heavy text-[11px] focus:outline-none focus:bg-[#F8F8F8] bg-white"
+            />
+            <div className="flex gap-1">
+              {['小红书', 'Pinterest', 'Instagram'].map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => onUpdate({ source_platform: item.source_platform === p ? '' : p })}
+                  className={cn(
+                    'h-7 px-1.5 border text-[9px] transition-colors whitespace-nowrap',
+                    item.source_platform === p ? 'bg-black text-white border-black' : 'border-current text-[#aaa] hover:border-black hover:text-black'
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
           {/* Tags */}
           <div className="flex flex-wrap gap-1 pt-0.5">
             {allTags.map(tag => {

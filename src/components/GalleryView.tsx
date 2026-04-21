@@ -70,13 +70,12 @@ export default function GalleryView() {
     router.push(`/?dim=${activeDim}${next ? `&tag=${next}` : ''}`, { scroll: false })
   }
 
-  const firstTag = dimTags[0]
 
   return (
     <div className="min-h-screen bg-white">
 
       {/* ─── HEADER ─── */}
-      <header style={{ padding: '36px 48px 28px 48px' }}>
+      <header style={{ padding: '36px 48px 68px 48px' }}>
         {/* Same 6-col grid as the material grid below */}
         <div style={{
           display: 'grid',
@@ -86,17 +85,18 @@ export default function GalleryView() {
         }}>
 
           {/* Reference Library — spans col 1–2 */}
-          <div style={{ gridColumn: '1 / 3' }}>
+          <div style={{ gridColumn: '1 / 3', marginTop: '-5px' }}>
             <Link href="/" style={{ textDecoration: 'none' }}>
               <h1 style={{
-                fontSize: '42px',
+                fontSize: 'clamp(28px, 4vw, 56px)',
                 fontWeight: 700,
                 lineHeight: 1.05,
                 letterSpacing: '-0.02em',
                 color: '#111',
                 fontFamily: '"Helvetica Neue", "PingFang SC", Arial, sans-serif',
+                wordBreak: 'keep-all',
               }}>
-                Reference<br />Library
+                Reference Library
               </h1>
             </Link>
           </div>
@@ -141,8 +141,15 @@ export default function GalleryView() {
             )
           })}
 
-          {/* col 6 — empty */}
-          <div />
+          {/* col 6 — logo */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/REDesign logo.svg"
+              alt="REDesign"
+              style={{ height: '28px', width: 'auto' }}
+            />
+          </div>
 
         </div>
       </header>
@@ -154,8 +161,28 @@ export default function GalleryView() {
         display: 'flex',
         alignItems: 'center',
       }}>
+        {/* 全部 button */}
+        <button
+          onClick={() => { setActiveTag(''); router.push(`/?dim=${activeDim}`, { scroll: false }) }}
+          style={{
+            padding: '14px 16px 12px 0',
+            marginRight: '8px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontFamily: '"Helvetica Neue", "PingFang SC", Arial, sans-serif',
+            color: !activeTag ? '#111' : '#aaa',
+            fontWeight: !activeTag ? 500 : 400,
+            borderBottom: !activeTag ? '2px solid #111' : '2px solid transparent',
+            transition: 'color 0.15s',
+          }}
+        >
+          全部
+        </button>
+
         {dimTags.map(tag => {
-          const isActive = activeTag === tag.slug || (!activeTag && tag.id === firstTag?.id)
+          const isActive = !!activeTag && activeTag === tag.slug
           return (
             <button
               key={tag.id}

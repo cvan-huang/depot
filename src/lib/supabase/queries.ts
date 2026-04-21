@@ -117,6 +117,34 @@ export async function createMaterial(material: {
   return data
 }
 
+export async function updateMaterial(id: string, updates: {
+  title?: string
+  description?: string
+  source_url?: string
+  source_platform?: string
+}) {
+  const supabase = createClient()
+  const { error } = await supabase.from('materials').update(updates).eq('id', id)
+  if (error) throw error
+}
+
+export async function updateMaterialTags(materialId: string, tagIds: string[]) {
+  const supabase = createClient()
+  // Delete existing tags
+  const { error: delError } = await supabase
+    .from('material_tags')
+    .delete()
+    .eq('material_id', materialId)
+  if (delError) throw delError
+  // Insert new tags
+  if (tagIds.length > 0) {
+    const { error: insError } = await supabase
+      .from('material_tags')
+      .insert(tagIds.map(tagId => ({ material_id: materialId, tag_id: tagId })))
+    if (insError) throw insError
+  }
+}
+
 export async function deleteMaterial(id: string) {
   const supabase = createClient()
   const { error } = await supabase.from('materials').delete().eq('id', id)
