@@ -85,10 +85,10 @@ export default function UploadPage() {
     const { getOrCreateTag } = await import('@/lib/supabase/queries')
 
     try {
-      // For MP4: extract a frame client-side and send as base64
+      // Always send image as base64 from client (avoids Vercel → Supabase fetch failures)
       const body = item.mediaType === 'video'
         ? { imageBase64: await extractVideoFrame(item.file) }
-        : { imageUrl: item.supabaseUrl }
+        : { imageBase64: await readFileAsDataURL(item.file) }
 
       const res = await fetch('/api/analyze-image', {
         method: 'POST',
