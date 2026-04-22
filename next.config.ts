@@ -16,6 +16,14 @@ const nextConfig: NextConfig = {
         protocol: 'http',
         hostname: '*.clouddn.com',
       },
+      {
+        protocol: 'https',
+        hostname: '*.clouddn.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.qiniucdn.com',
+      },
     ],
   },
 };

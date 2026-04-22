@@ -97,15 +97,12 @@ export async function findMaterialByHash(hash: string): Promise<boolean> {
     .maybeSingle()
   if (byHash) return true
   // Check by URL containing hash as filename (works after key-as-hash upload strategy)
-  const domain = process.env.NEXT_PUBLIC_QINIU_DOMAIN
-  if (domain) {
-    const { data: byUrl } = await supabase
-      .from('materials')
-      .select('id')
-      .like('image_url', `%/${hash}.%`)
-      .maybeSingle()
-    if (byUrl) return true
-  }
+  const { data: byUrl } = await supabase
+    .from('materials')
+    .select('id')
+    .like('image_url', `%/${hash}.%`)
+    .maybeSingle()
+  if (byUrl) return true
   return false
 }
 

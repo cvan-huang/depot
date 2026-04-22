@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       })
     })
 
-    const publicUrl = `http://${domain}/${result.key}`
+    const publicUrl = `https://${domain}/${result.key}`
     return NextResponse.json({ url: publicUrl })
   } catch (err: any) {
     console.error('Qiniu upload error:', err)
