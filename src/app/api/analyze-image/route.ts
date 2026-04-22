@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
 
-const SCENE_TAGS = ['品牌', '运营', '包装', '多媒体', '衍生品']
-const STYLE_TAGS = ['极简高级', '拼贴', '插画', '3D', '复古', '怪诞超现实', '时髦', '年轻前卫']
-const ELEMENT_TAGS = ['排版字体', '色彩搭配', '插画', '摄影', '拼贴', '3D']
-
 function getProviderConfig() {
   if (process.env.DOUBAO_API_KEY) {
     return {
@@ -25,14 +21,21 @@ function getProviderConfig() {
   return null
 }
 
+function isVideoUrl(url: string) {
+  return /\.(mp4|webm|mov)(\?|$)/i.test(url)
+}
+
+function isGifUrl(url: string) {
+  return /\.gif(\?|$)/i.test(url)
+}
+
 async function toCompressedBase64(imageUrl: string): Promise<string> {
-  // Fetch image from Supabase (our server can reach it)
   const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) })
   if (!res.ok) throw new Error(`图片获取失败: ${res.status}`)
   const buffer = Buffer.from(await res.arrayBuffer())
 
-  // Resize to max 512px and compress to JPEG < 300KB
-  const compressed = await sharp(buffer)
+  // animated: false → only process first frame (needed for GIF)
+  const compressed = await sharp(buffer, { animated: false })
     .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 75 })
     .toBuffer()
@@ -40,18 +43,16 @@ async function toCompressedBase64(imageUrl: string): Promise<string> {
   return `data:image/jpeg;base64,${compressed.toString('base64')}`
 }
 
-const prompt = `你是一个专业的设计审美分析师，专注于小红书平台的设计风格。
+const prompt = `你是一个专业的设计审美分析师。
 
-请分析这张设计参考图，从以下三个维度的标签中选择最合适的标签（可多选）：
-
-场景标签（选 1-2 个）：${SCENE_TAGS.join('、')}
-风格标签（选 1-3 个）：${STYLE_TAGS.join('、')}
-元素标签（选 1-3 个）：${ELEMENT_TAGS.join('、')}
+请分析这张设计参考图，自由生成 8-12 个中文标签，描述其设计风格、视觉元素、使用场景和设计手法。
+要求：标签简洁（2-6个字），专业且具体，避免泛泛而谈。
+示例风格：极简排版、撞色配色、手绘插画、品牌视觉、3D立体感、日系清新、文字海报、几何构成……
 
 同时生成一个简洁的中文标题（10字以内）和一句描述（30字以内），描述这张图的设计亮点。
 
 严格按以下 JSON 格式返回，不要有其他文字：
-{"title":"标题","description":"描述","scene":["标签"],"style":["标签1","标签2"],"element":["标签1"]}`
+{"title":"标题","description":"描述","tags":["标签1","标签2","标签3"]}`
 
 export async function POST(req: NextRequest) {
   const provider = getProviderConfig()
@@ -64,16 +65,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '请提供图片' }, { status: 400 })
   }
 
+  const animated = imageUrl ? isGifUrl(imageUrl) : false
+
   // Always convert to small compressed base64 on our server
   let imageDataUrl = ''
   try {
     if (imageUrl) {
       imageDataUrl = await toCompressedBase64(imageUrl)
     } else if (imageBase64) {
-      // Strip data URL prefix and decompress through sharp
       const b64 = imageBase64.replace(/^data:image\/\w+;base64,/, '')
       const buf = Buffer.from(b64, 'base64')
-      const compressed = await sharp(buf)
+      const compressed = await sharp(buf, { animated: false })
         .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 75 })
         .toBuffer()
@@ -118,7 +120,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `AI 返回格式异常: ${content.slice(0, 100)}` }, { status: 500 })
     }
 
-    return NextResponse.json(JSON.parse(jsonMatch[0]))
+    const result = JSON.parse(jsonMatch[0])
+    // Tell client to auto-add "动态" tag for animated formats
+    if (animated) result._animated = true
+    return NextResponse.json(result)
   } catch (err: any) {
     return NextResponse.json({ error: err.message || '分析失败' }, { status: 500 })
   }

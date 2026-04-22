@@ -15,6 +15,7 @@ export interface Material {
   image_url: string
   source_url?: string
   source_platform?: string
+  author?: string
   is_featured: boolean
   created_at: string
 }

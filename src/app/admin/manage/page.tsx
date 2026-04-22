@@ -16,7 +16,7 @@ export default function ManagePage() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [showBulkConfirm, setShowBulkConfirm] = useState(false)
   const [editItem, setEditItem] = useState<MaterialWithTags | null>(null)
-  const [editForm, setEditForm] = useState({ title: '', description: '', source_url: '', source_platform: '' })
+  const [editForm, setEditForm] = useState({ title: '', description: '', source_url: '', source_platform: '', author: '' })
   const [editTags, setEditTags] = useState<string[]>([])
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [saving, setSaving] = useState(false)
@@ -82,9 +82,20 @@ export default function ManagePage() {
     })
   }
 
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set())
+    else setSelected(new Set(filtered.map(m => m.id)))
+  }
+
   const openEdit = (m: MaterialWithTags) => {
     setEditItem(m)
-    setEditForm({ title: m.title, description: m.description || '', source_url: m.source_url || '', source_platform: m.source_platform || '' })
+    setEditForm({
+      title: m.title,
+      description: m.description || '',
+      source_url: m.source_url || '',
+      source_platform: m.source_platform || '',
+      author: (m as any).author || '',
+    })
     setEditTags((m.tags || []).map(t => t.id))
   }
 
@@ -96,7 +107,7 @@ export default function ManagePage() {
     if (!editItem) return
     setSaving(true)
     try {
-      const { updateMaterial, updateMaterialTags, getAllTags: _gt } = await import('@/lib/supabase/queries')
+      const { updateMaterial, updateMaterialTags } = await import('@/lib/supabase/queries')
       await Promise.all([
         updateMaterial(editItem.id, editForm),
         updateMaterialTags(editItem.id, editTags),
@@ -110,214 +121,176 @@ export default function ManagePage() {
     setSaving(false)
   }
 
-  const toggleSelectAll = () => {
-    if (selected.size === filtered.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map(m => m.id)))
-    }
-  }
+  const font = '"Helvetica Neue", "PingFang SC", Arial, sans-serif'
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div style={{ fontFamily: font }}>
+      {/* Header */}
+      <div style={{ padding: '32px 40px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">管理素材</h1>
-          <p className="text-sm text-[#8C8C8C] mt-1">
+          <h1 style={{ fontSize: '32px', fontWeight: 700, letterSpacing: '-0.02em', color: '#111' }}>管理素材</h1>
+          <p style={{ fontSize: '12px', color: '#BDBDBD', marginTop: '4px' }}>
             {loading ? '加载中...' : `共 ${materials.length} 个素材`}
-            {selected.size > 0 && (
-              <span className="ml-2 text-[#FF2442] font-medium">· 已选 {selected.size} 个</span>
-            )}
+            {selected.size > 0 && <span style={{ color: '#FF2442', marginLeft: '8px' }}>· 已选 {selected.size} 个</span>}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {selected.size > 0 && (
             <button
               onClick={() => setShowBulkConfirm(true)}
               disabled={bulkDeleting}
-              className="h-9 px-4 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+              style={{ height: '36px', padding: '0 16px', background: '#111', color: '#fff', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: font }}
             >
               {bulkDeleting ? '删除中...' : `删除所选 (${selected.size})`}
             </button>
           )}
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="搜索素材..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="h-9 pl-9 pr-3 rounded-xl border border-[#EBEBEB] bg-[#F5F5F5] text-sm placeholder:text-[#BDBDBD] focus:outline-none focus:border-[#FF2442] transition-colors w-52"
-            />
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#BDBDBD]" width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="5.5" cy="5.5" r="3.5" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M9 9L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden">
-        <div className="grid grid-cols-[32px_80px_1fr_200px_80px_100px] items-center gap-4 px-4 py-3 border-b border-[#EBEBEB]">
           <input
-            type="checkbox"
-            checked={filtered.length > 0 && selected.size === filtered.length}
-            onChange={toggleSelectAll}
-            className="w-4 h-4 cursor-pointer accent-[#FF2442]"
+            type="text"
+            placeholder="搜索素材..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ height: '36px', padding: '0 12px', border: '1px solid #EBEBEB', fontSize: '12px', width: '180px', outline: 'none', fontFamily: font, background: '#FAFAFA' }}
           />
-          <span className="text-xs text-[#8C8C8C] font-medium">封面</span>
-          <span className="text-xs text-[#8C8C8C] font-medium">标题</span>
-          <span className="text-xs text-[#8C8C8C] font-medium">标签</span>
-          <span className="text-xs text-[#8C8C8C] font-medium">状态</span>
-          <span className="text-xs text-[#8C8C8C] font-medium">操作</span>
         </div>
-
-        {loading && (
-          <div className="py-12 text-center text-[#8C8C8C] text-sm">加载中...</div>
-        )}
-
-        {!loading && filtered.map(m => (
-          <div
-            key={m.id}
-            className={cn(
-              'grid grid-cols-[32px_80px_1fr_200px_80px_100px] items-center gap-4 px-4 py-3 border-b border-[#EBEBEB] last:border-0 transition-colors',
-              selected.has(m.id) ? 'bg-[#FFF5F6]' : 'hover:bg-[#FAFAFA]'
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={selected.has(m.id)}
-              onChange={() => toggleSelect(m.id)}
-              className="w-4 h-4 cursor-pointer accent-[#FF2442]"
-            />
-            <div className="w-16 h-12 rounded-xl overflow-hidden bg-[#F5F5F5] shrink-0">
-              <Image
-                src={m.image_url}
-                alt={m.title}
-                width={64}
-                height={48}
-                className="w-full h-full object-cover"
-                unoptimized
-              />
-            </div>
-
-            <div>
-              <p className="text-sm font-medium text-[#1A1A1A] line-clamp-1">{m.title}</p>
-              {m.description && (
-                <p className="text-xs text-[#8C8C8C] line-clamp-1 mt-0.5">{m.description}</p>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-1">
-              {(m.tags || []).slice(0, 3).map(t => (
-                <span
-                  key={t.id}
-                  className="text-[10px] px-1.5 py-0.5 rounded-full"
-                  style={{ backgroundColor: t.color ? `${t.color}22` : '#F5F5F5', color: t.color || '#666' }}
-                >
-                  {t.name}
-                </span>
-              ))}
-              {(m.tags || []).length === 0 && (
-                <span className="text-[10px] text-[#BDBDBD]">无标签</span>
-              )}
-            </div>
-
-            <button
-              onClick={() => handleToggleFeatured(m.id, m.is_featured)}
-              className={cn(
-                'text-[10px] px-2 py-1 rounded-full font-medium transition-all',
-                m.is_featured
-                  ? 'bg-[#FFF0F2] text-[#FF2442]'
-                  : 'bg-[#F5F5F5] text-[#8C8C8C] hover:bg-[#FFF0F2] hover:text-[#FF2442]'
-              )}
-            >
-              {m.is_featured ? '精选 ✓' : '普通'}
-            </button>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => openEdit(m)}
-                className="text-xs text-[#8C8C8C] hover:text-black transition-colors"
-              >
-                编辑
-              </button>
-              <button
-                onClick={() => setDeleteId(m.id)}
-                className="text-xs text-[#8C8C8C] hover:text-red-500 transition-colors"
-              >
-                删除
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {!loading && filtered.length === 0 && (
-          <div className="py-12 text-center text-[#8C8C8C] text-sm">
-            {materials.length === 0 ? '暂无素材，去上传吧' : '没有找到匹配的素材'}
-          </div>
-        )}
       </div>
 
+      {/* Table header */}
+      <div style={{ display: 'grid', gridTemplateColumns: '40px 72px 1fr 1fr 80px', gap: '16px', padding: '12px 40px', borderBottom: '1px solid #EBEBEB', background: '#FAFAFA' }}>
+        <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleSelectAll} style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: '#111' }} />
+        <span style={{ fontSize: '11px', color: '#BDBDBD' }}>封面</span>
+        <span style={{ fontSize: '11px', color: '#BDBDBD' }}>标题</span>
+        <span style={{ fontSize: '11px', color: '#BDBDBD' }}>标签</span>
+        <span style={{ fontSize: '11px', color: '#BDBDBD' }}>操作</span>
+      </div>
+
+      {loading && (
+        <div style={{ padding: '60px', textAlign: 'center', color: '#BDBDBD', fontSize: '13px' }}>加载中...</div>
+      )}
+
+      {!loading && filtered.map(m => (
+        <div
+          key={m.id}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '40px 72px 1fr 1fr 80px',
+            gap: '16px',
+            padding: '16px 40px',
+            borderBottom: '1px solid #F0F0F0',
+            alignItems: 'center',
+            background: selected.has(m.id) ? '#FAFAFA' : '#fff',
+          }}
+        >
+          <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleSelect(m.id)} style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: '#111' }} />
+
+          <div style={{ width: '64px', height: '48px', overflow: 'hidden', background: '#F5F5F5', borderRadius: '2px' }}>
+            <Image src={m.image_url} alt={m.title} width={64} height={48} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
+          </div>
+
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: '13px', fontWeight: 600, color: '#111', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{m.title}</p>
+            {m.description && <p style={{ fontSize: '11px', color: '#BDBDBD', marginTop: '2px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{m.description}</p>}
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {(m.tags || []).map(t => (
+              <span key={t.id} style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', backgroundColor: t.color ? `${t.color}18` : '#F5F5F5', color: t.color || '#888' }}>
+                {t.name}
+              </span>
+            ))}
+            {(m.tags || []).length === 0 && <span style={{ fontSize: '11px', color: '#BDBDBD' }}>无标签</span>}
+          </div>
+
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <button onClick={() => openEdit(m)} style={{ fontSize: '12px', color: '#BDBDBD', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}
+              onMouseOver={e => (e.currentTarget.style.color = '#111')} onMouseOut={e => (e.currentTarget.style.color = '#BDBDBD')}>编辑</button>
+            <button onClick={() => setDeleteId(m.id)} style={{ fontSize: '12px', color: '#BDBDBD', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}
+              onMouseOver={e => (e.currentTarget.style.color = '#FF2442')} onMouseOut={e => (e.currentTarget.style.color = '#BDBDBD')}>删除</button>
+          </div>
+        </div>
+      ))}
+
+      {!loading && filtered.length === 0 && (
+        <div style={{ padding: '60px', textAlign: 'center', color: '#BDBDBD', fontSize: '13px' }}>
+          {materials.length === 0 ? '暂无素材，去上传吧' : '没有找到匹配的素材'}
+        </div>
+      )}
+
+      {/* Bulk delete confirm */}
       {showBulkConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <h3 className="text-base font-bold text-[#1A1A1A] mb-2">批量删除 {selected.size} 个素材？</h3>
-            <p className="text-sm text-[#8C8C8C] mb-5">此操作不可恢复，所有选中的素材将被永久删除。</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowBulkConfirm(false)}
-                className="flex-1 h-10 rounded-xl border border-[#EBEBEB] text-sm text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleBulkDelete}
-                className="flex-1 h-10 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
-              >
-                确认全部删除
-              </button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: '#fff', padding: '32px', width: '360px', fontFamily: font }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>删除 {selected.size} 个素材？</h3>
+            <p style={{ fontSize: '12px', color: '#BDBDBD', marginBottom: '24px' }}>此操作不可恢复。</p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => setShowBulkConfirm(false)} style={{ flex: 1, height: '40px', border: '1px solid #EBEBEB', background: '#fff', fontSize: '13px', cursor: 'pointer', fontFamily: font }}>取消</button>
+              <button onClick={handleBulkDelete} style={{ flex: 1, height: '40px', background: '#111', color: '#fff', border: 'none', fontSize: '13px', cursor: 'pointer', fontFamily: font }}>确认删除</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Edit modal */}
       {editItem && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
-            <h3 className="text-base font-bold text-[#1A1A1A] mb-4">编辑素材</h3>
-            <div className="space-y-3">
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: '#fff', padding: '32px', width: '480px', maxHeight: '80vh', overflowY: 'auto', fontFamily: font }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>编辑素材</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {([
+                { label: '标题', key: 'title' },
+                { label: '描述', key: 'description' },
+                { label: '来源链接', key: 'source_url' },
+                { label: '由 TA 推荐', key: 'author' },
+              ] as const).map(({ label, key }) => (
+                <div key={key}>
+                  <label style={{ fontSize: '11px', color: '#BDBDBD', display: 'block', marginBottom: '6px' }}>{label}</label>
+                  <input
+                    value={editForm[key]}
+                    onChange={e => setEditForm(p => ({ ...p, [key]: e.target.value }))}
+                    style={{ width: '100%', height: '36px', padding: '0 10px', border: '1px solid #EBEBEB', fontSize: '13px', outline: 'none', fontFamily: font, background: '#FAFAFA' }}
+                  />
+                </div>
+              ))}
+
               <div>
-                <label className="text-xs text-[#8C8C8C] block mb-1">标题</label>
-                <input value={editForm.title} onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))}
-                  className="w-full h-9 px-3 rounded-lg border border-[#EBEBEB] text-sm focus:outline-none focus:border-[#FF2442]" />
+                <label style={{ fontSize: '11px', color: '#BDBDBD', display: 'block', marginBottom: '6px' }}>来源平台</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {['小红书', 'Pinterest', 'Instagram'].map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setEditForm(prev => ({ ...prev, source_platform: prev.source_platform === p ? '' : p }))}
+                      style={{
+                        flex: 1, height: '36px', border: '1px solid',
+                        borderColor: editForm.source_platform === p ? '#111' : '#EBEBEB',
+                        background: editForm.source_platform === p ? '#111' : '#fff',
+                        color: editForm.source_platform === p ? '#fff' : '#BDBDBD',
+                        fontSize: '12px', cursor: 'pointer', fontFamily: font,
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
               </div>
+
               <div>
-                <label className="text-xs text-[#8C8C8C] block mb-1">描述</label>
-                <textarea value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
-                  rows={2} className="w-full px-3 py-2 rounded-lg border border-[#EBEBEB] text-sm focus:outline-none focus:border-[#FF2442] resize-none" />
-              </div>
-              <div>
-                <label className="text-xs text-[#8C8C8C] block mb-1">来源链接</label>
-                <input value={editForm.source_url} onChange={e => setEditForm(p => ({ ...p, source_url: e.target.value }))}
-                  placeholder="https://..." className="w-full h-9 px-3 rounded-lg border border-[#EBEBEB] text-sm focus:outline-none focus:border-[#FF2442]" />
-              </div>
-              <div>
-                <label className="text-xs text-[#8C8C8C] block mb-2">标签</label>
-                <div className="space-y-2">
+                <label style={{ fontSize: '11px', color: '#BDBDBD', display: 'block', marginBottom: '8px' }}>标签</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {(['scene', 'style', 'element'] as const).map(dim => (
                     <div key={dim}>
-                      <p className="text-[10px] text-[#BDBDBD] mb-1">{DIM_LABELS[dim]}</p>
-                      <div className="flex flex-wrap gap-1">
+                      <p style={{ fontSize: '10px', color: '#BDBDBD', marginBottom: '6px' }}>{DIM_LABELS[dim]}</p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                         {allTags.filter(t => t.dimension === dim).map(tag => (
                           <button
                             key={tag.id}
                             type="button"
                             onClick={() => toggleEditTag(tag.id)}
-                            className="text-[11px] px-2 py-0.5 rounded-full border transition-all"
                             style={{
-                              backgroundColor: editTags.includes(tag.id) ? (tag.color || '#000') : 'transparent',
-                              color: editTags.includes(tag.id) ? '#fff' : (tag.color || '#666'),
-                              borderColor: tag.color || '#ccc',
+                              fontSize: '11px', padding: '3px 10px', borderRadius: '999px', border: '1px solid',
+                              backgroundColor: editTags.includes(tag.id) ? (tag.color || '#111') : 'transparent',
+                              color: editTags.includes(tag.id) ? '#fff' : (tag.color || '#888'),
+                              borderColor: tag.color || '#E0E0E0',
+                              cursor: 'pointer', fontFamily: font,
                             }}
                           >
                             {tag.name}
@@ -328,35 +301,11 @@ export default function ManagePage() {
                   ))}
                 </div>
               </div>
-
-              <div>
-                <label className="text-xs text-[#8C8C8C] block mb-1">来源平台</label>
-                <div className="flex gap-2">
-                  {['小红书', 'Pinterest', 'Instagram'].map(p => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setEditForm(prev => ({ ...prev, source_platform: prev.source_platform === p ? '' : p }))}
-                      className={cn(
-                        'flex-1 h-9 rounded-lg border text-sm transition-colors',
-                        editForm.source_platform === p
-                          ? 'bg-black text-white border-black'
-                          : 'border-[#EBEBEB] text-[#8C8C8C] hover:border-black hover:text-black'
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
-            <div className="flex gap-3 mt-5">
-              <button onClick={() => setEditItem(null)}
-                className="flex-1 h-10 rounded-xl border border-[#EBEBEB] text-sm text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors">
-                取消
-              </button>
-              <button onClick={handleSaveEdit} disabled={saving}
-                className="flex-1 h-10 rounded-xl bg-black text-white text-sm font-semibold hover:bg-[#333] transition-colors disabled:opacity-50">
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '24px' }}>
+              <button onClick={() => setEditItem(null)} style={{ flex: 1, height: '40px', border: '1px solid #EBEBEB', background: '#fff', fontSize: '13px', cursor: 'pointer', fontFamily: font }}>取消</button>
+              <button onClick={handleSaveEdit} disabled={saving} style={{ flex: 1, height: '40px', background: '#111', color: '#fff', border: 'none', fontSize: '13px', cursor: 'pointer', fontFamily: font, opacity: saving ? 0.5 : 1 }}>
                 {saving ? '保存中...' : '保存'}
               </button>
             </div>
@@ -364,24 +313,15 @@ export default function ManagePage() {
         </div>
       )}
 
+      {/* Delete confirm */}
       {deleteId && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <h3 className="text-base font-bold text-[#1A1A1A] mb-2">确认删除？</h3>
-            <p className="text-sm text-[#8C8C8C] mb-5">此操作不可恢复，素材将被永久删除。</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteId(null)}
-                className="flex-1 h-10 rounded-xl border border-[#EBEBEB] text-sm text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => handleDelete(deleteId)}
-                className="flex-1 h-10 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
-              >
-                确认删除
-              </button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: '#fff', padding: '32px', width: '360px', fontFamily: font }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>确认删除？</h3>
+            <p style={{ fontSize: '12px', color: '#BDBDBD', marginBottom: '24px' }}>此操作不可恢复。</p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => setDeleteId(null)} style={{ flex: 1, height: '40px', border: '1px solid #EBEBEB', background: '#fff', fontSize: '13px', cursor: 'pointer', fontFamily: font }}>取消</button>
+              <button onClick={() => handleDelete(deleteId)} style={{ flex: 1, height: '40px', background: '#111', color: '#fff', border: 'none', fontSize: '13px', cursor: 'pointer', fontFamily: font }}>确认删除</button>
             </div>
           </div>
         </div>

@@ -54,10 +54,12 @@ export async function getMaterials(options?: {
     tags: (m.tags || []).map((t: any) => t.tag).filter(Boolean),
   })) as MaterialWithTags[]
 
-  // Client-side filter: only filter when a specific tag is selected
-  // When just browsing a dimension, show all materials (including untagged)
+  // Filter by specific tag first
   if (options?.tagSlug) {
     materials = materials.filter(m => m.tags.some((t: Tag) => t.slug === options.tagSlug))
+  } else if (options?.dimension) {
+    // Filter by dimension: show materials that have at least one tag in this dimension
+    materials = materials.filter(m => m.tags.some((t: Tag) => t.dimension === options.dimension))
   }
 
   return materials
@@ -85,12 +87,36 @@ export async function getMaterialById(id: string): Promise<MaterialWithTags | nu
   } as MaterialWithTags
 }
 
+export async function findMaterialByHash(hash: string): Promise<boolean> {
+  const supabase = createClient()
+  // Check by hash column (works for materials uploaded after hash feature)
+  const { data: byHash } = await supabase
+    .from('materials')
+    .select('id')
+    .eq('image_hash', hash)
+    .maybeSingle()
+  if (byHash) return true
+  // Check by URL containing hash as filename (works after key-as-hash upload strategy)
+  const domain = process.env.NEXT_PUBLIC_QINIU_DOMAIN
+  if (domain) {
+    const { data: byUrl } = await supabase
+      .from('materials')
+      .select('id')
+      .like('image_url', `%/${hash}.%`)
+      .maybeSingle()
+    if (byUrl) return true
+  }
+  return false
+}
+
 export async function createMaterial(material: {
   title: string
   description?: string
   image_url: string
   source_url?: string
   source_platform?: string
+  author?: string
+  image_hash?: string
   is_featured?: boolean
   tagIds?: string[]
 }) {
@@ -122,6 +148,7 @@ export async function updateMaterial(id: string, updates: {
   description?: string
   source_url?: string
   source_platform?: string
+  author?: string
 }) {
   const supabase = createClient()
   const { error } = await supabase.from('materials').update(updates).eq('id', id)
@@ -157,19 +184,19 @@ export async function toggleFeatured(id: string, value: boolean) {
   if (error) throw error
 }
 
-export async function uploadImage(file: File): Promise<string> {
-  const supabase = createClient()
-  const ext = file.name.split('.').pop()
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+export async function uploadImage(file: File, hash?: string): Promise<string> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (hash) formData.append('hash', hash)
 
-  const { error } = await supabase.storage
-    .from('images')
-    .upload(filename, file, { cacheControl: '3600', upsert: false })
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    body: formData,
+  })
 
-  if (error) throw error
-
-  const { data } = supabase.storage.from('images').getPublicUrl(filename)
-  return data.publicUrl
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '上传失败')
+  return data.url
 }
 
 export async function createTag(tag: { name: string; slug: string; dimension: string; color?: string }) {
@@ -177,6 +204,31 @@ export async function createTag(tag: { name: string; slug: string; dimension: st
   const { data, error } = await supabase.from('tags').insert(tag).select().single()
   if (error) throw error
   return data
+}
+
+export async function getOrCreateTag(name: string): Promise<Tag> {
+  const supabase = createClient()
+  const trimmed = name.trim()
+
+  // Try to find existing tag by name (case-insensitive)
+  const { data: existing } = await supabase
+    .from('tags')
+    .select('*')
+    .ilike('name', trimmed)
+    .maybeSingle()
+
+  if (existing) return existing as Tag
+
+  // Create new tag
+  const slug = `${trimmed.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fa5-]/g, '')}-${Date.now()}`
+  const { data, error } = await supabase
+    .from('tags')
+    .insert({ name: trimmed, slug, dimension: 'element' })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as Tag
 }
 
 export async function deleteTag(id: string) {

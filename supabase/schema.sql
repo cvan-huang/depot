@@ -16,6 +16,7 @@ create table if not exists materials (
   image_url text not null,
   source_url text,
   source_platform text,
+  author text,
   is_featured boolean default false,
   created_at timestamptz default now()
 );

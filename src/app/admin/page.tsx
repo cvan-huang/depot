@@ -1,89 +1,141 @@
-import Link from 'next/link'
-import { MOCK_MATERIALS, MOCK_TAGS } from '@/lib/mock-data'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { MaterialWithTags } from '@/types'
+
+const font = '"Helvetica Neue", "PingFang SC", Arial, sans-serif'
+
+interface ActivityGroup {
+  author: string
+  count: number
+  date: string
+  time: string
+  materials: MaterialWithTags[]
+}
+
+function groupByAuthorAndDay(materials: MaterialWithTags[]): ActivityGroup[] {
+  const map = new Map<string, MaterialWithTags[]>()
+
+  for (const m of materials) {
+    const author = (m as any).author || '未署名'
+    const date = new Date(m.created_at)
+    const dateKey = date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    const key = `${author}__${dateKey}`
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(m)
+  }
+
+  return Array.from(map.entries()).map(([key, items]) => {
+    const [author] = key.split('__')
+    const sorted = [...items].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    const latest = new Date(sorted[0].created_at)
+    return {
+      author,
+      count: items.length,
+      date: latest.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' }),
+      time: latest.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      materials: sorted,
+    }
+  }).sort((a, b) => {
+    const aTime = new Date(a.materials[0].created_at).getTime()
+    const bTime = new Date(b.materials[0].created_at).getTime()
+    return bTime - aTime
+  })
+}
 
 export default function AdminDashboard() {
-  const total = MOCK_MATERIALS.length
-  const featured = MOCK_MATERIALS.filter(m => m.is_featured).length
-  const tagCount = MOCK_TAGS.length
+  const [materials, setMaterials] = useState<MaterialWithTags[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const stats = [
-    { label: 'TOTAL MATERIALS', value: total },
-    { label: 'EDITOR PICKS', value: featured },
-    { label: 'TOTAL TAGS', value: tagCount },
-  ]
+  useEffect(() => {
+    import('@/lib/supabase/queries').then(({ getMaterials }) => {
+      getMaterials().then(data => {
+        setMaterials(data)
+        setLoading(false)
+      })
+    })
+  }, [])
+
+  const activities = groupByAuthorAndDay(materials)
 
   return (
-    <div>
-      {/* Header */}
-      <div className="border-bottom-heavy px-6 py-4">
-        <h1 className="heading-display text-3xl">OVERVIEW</h1>
+    <div style={{ fontFamily: font, padding: '32px 48px 80px' }}>
+
+      {/* Title + total */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '48px' }}>
+        <h2 style={{ fontSize: '32px', fontWeight: 700, letterSpacing: '-0.02em', color: '#111' }}>
+          Overview
+        </h2>
+        {!loading && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+            <span style={{ fontSize: '48px', fontWeight: 700, letterSpacing: '-0.03em', color: '#111' }}>
+              {materials.length}
+            </span>
+            <span style={{ fontSize: '13px', color: '#BDBDBD' }}>张素材</span>
+          </div>
+        )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 border-bottom-heavy">
-        {stats.map((stat, i) => (
-          <div key={stat.label} className={`p-6 ${i < 2 ? 'border-right-heavy' : ''}`}>
-            <p className="heading-display text-5xl text-black mb-2">{stat.value}</p>
-            <p className="nav-label text-[10px] text-[#808080]">{stat.label}</p>
+      {/* Activity log */}
+      <div>
+        <p style={{ fontSize: '11px', color: '#BDBDBD', marginBottom: '20px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          上传记录
+        </p>
+
+        {loading && (
+          <p style={{ fontSize: '13px', color: '#BDBDBD', padding: '40px 0' }}>加载中...</p>
+        )}
+
+        {!loading && activities.length === 0 && (
+          <p style={{ fontSize: '13px', color: '#BDBDBD', padding: '40px 0' }}>暂无上传记录</p>
+        )}
+
+        {!loading && activities.map((group, i) => (
+          <div
+            key={i}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '160px 1fr 120px',
+              gap: '24px',
+              alignItems: 'start',
+              padding: '20px 0',
+              borderBottom: '1px solid #F0F0F0',
+            }}
+          >
+            {/* Who */}
+            <div>
+              <p style={{ fontSize: '13px', fontWeight: 600, color: '#111' }}>{group.author}</p>
+              <p style={{ fontSize: '11px', color: '#BDBDBD', marginTop: '3px' }}>
+                上传了 {group.count} 张
+              </p>
+            </div>
+
+            {/* Preview thumbnails */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {group.materials.slice(0, 8).map(m => (
+                <div
+                  key={m.id}
+                  style={{ width: '40px', height: '40px', borderRadius: '3px', overflow: 'hidden', background: '#F5F5F5', flexShrink: 0 }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={m.image_url} alt={m.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              ))}
+              {group.count > 8 && (
+                <div style={{ width: '40px', height: '40px', borderRadius: '3px', background: '#F5F5F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#BDBDBD' }}>
+                  +{group.count - 8}
+                </div>
+              )}
+            </div>
+
+            {/* When */}
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '12px', color: '#111' }}>{group.date}</p>
+              <p style={{ fontSize: '11px', color: '#BDBDBD', marginTop: '3px' }}>{group.time}</p>
+            </div>
           </div>
         ))}
       </div>
-
-      {/* Quick actions */}
-      <div className="grid grid-cols-2 border-bottom-heavy">
-        <Link href="/admin/upload" className="border-right-heavy p-6 group hover:bg-black transition-colors">
-          <p className="heading-display text-2xl group-hover:text-white mb-2">UPLOAD</p>
-          <p className="nav-label text-[10px] text-[#808080] group-hover:text-[#808080]">ADD NEW REFERENCE →</p>
-        </Link>
-        <Link href="/admin/manage" className="p-6 group hover:bg-black transition-colors">
-          <p className="heading-display text-2xl group-hover:text-white mb-2">MANAGE</p>
-          <p className="nav-label text-[10px] text-[#808080] group-hover:text-[#808080]">EDIT & DELETE →</p>
-        </Link>
-      </div>
-
-      {/* Recent table */}
-      <div className="border-bottom-heavy px-6 py-3">
-        <span className="heading-display text-lg">RECENT MATERIALS</span>
-      </div>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-bottom-heavy bg-[#F0F0F0]">
-            <th className="text-left nav-label text-[9px] text-[#808080] px-4 py-2 border-right-heavy">TITLE</th>
-            <th className="text-left nav-label text-[9px] text-[#808080] px-4 py-2 border-right-heavy">TAGS</th>
-            <th className="text-left nav-label text-[9px] text-[#808080] px-4 py-2 border-right-heavy">STATUS</th>
-            <th className="text-left nav-label text-[9px] text-[#808080] px-4 py-2">DATE</th>
-          </tr>
-        </thead>
-        <tbody>
-          {MOCK_MATERIALS.slice(0, 10).map((m, i) => (
-            <tr key={m.id} className={`border-bottom-heavy hover:bg-[#F0F0F0] transition-colors ${i % 2 === 0 ? '' : 'bg-[#FAFAFA]'}`}>
-              <td className="px-4 py-2.5 font-bold border-right-heavy">{m.title}</td>
-              <td className="px-4 py-2.5 border-right-heavy">
-                <div className="flex gap-1 flex-wrap">
-                  {m.tags.slice(0, 2).map(t => (
-                    <span
-                      key={t.id}
-                      className="nav-label text-[8px] px-1.5 py-0.5 border"
-                      style={{ borderColor: t.color, color: t.color }}
-                    >
-                      {t.name}
-                    </span>
-                  ))}
-                </div>
-              </td>
-              <td className="px-4 py-2.5 border-right-heavy">
-                {m.is_featured
-                  ? <span className="nav-label text-[9px] bg-[#FF2442] text-white px-2 py-0.5">PICK</span>
-                  : <span className="nav-label text-[9px] border border-[#808080] text-[#808080] px-2 py-0.5">STD</span>
-                }
-              </td>
-              <td className="px-4 py-2.5 nav-label text-[9px] text-[#808080]">
-                {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

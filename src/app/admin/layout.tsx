@@ -1,58 +1,89 @@
+'use client'
+
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
+const font = '"Helvetica Neue", "PingFang SC", Arial, sans-serif'
+
+const NAV = [
+  { href: '/admin/upload', label: 'UPLOAD' },
+  { href: '/admin/manage', label: 'MANAGE' },
+  { href: '/admin', label: 'OVERVIEW', exact: true },
+]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+
   return (
-    <div className="min-h-screen bg-white flex">
-      {/* Sidebar */}
-      <aside className="w-48 border-right-heavy flex flex-col shrink-0">
-        <div className="border-bottom-heavy p-4">
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-5 h-5 bg-[#FF2442] flex items-center justify-center shrink-0">
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <rect x="0.5" y="0.5" width="3.5" height="3.5" fill="white" />
-                <rect x="6" y="0.5" width="3.5" height="3.5" fill="white" opacity="0.7" />
-                <rect x="0.5" y="6" width="3.5" height="3.5" fill="white" opacity="0.7" />
-                <rect x="6" y="6" width="3.5" height="3.5" fill="white" opacity="0.4" />
-              </svg>
-            </div>
-            <div>
-              <p className="nav-label text-xs">MOODBOARD</p>
-              <p className="nav-label text-[9px] text-[#808080]">ADMIN</p>
-            </div>
+    <div style={{ minHeight: '100vh', background: '#fff', fontFamily: font }}>
+      {/* Header */}
+      <header style={{ padding: '36px 48px 0', borderBottom: '1px solid #e8e8e8' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+
+          {/* Title */}
+          <Link href="/admin" style={{ textDecoration: 'none' }}>
+            <h1 style={{
+              fontSize: 'clamp(28px, 4vw, 52px)',
+              fontWeight: 700,
+              lineHeight: 1.05,
+              letterSpacing: '-0.02em',
+              color: '#111',
+              fontFamily: font,
+            }}>
+              DEPOT
+            </h1>
           </Link>
+
+          {/* Nav tabs */}
+          <nav style={{ display: 'flex', alignItems: 'flex-end', gap: '0' }}>
+            {NAV.map(item => {
+              const isActive = item.exact
+                ? pathname === item.href
+                : pathname.startsWith(item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    padding: '10px 20px 12px',
+                    fontSize: '12px',
+                    fontWeight: isActive ? 600 : 400,
+                    color: isActive ? '#111' : '#BDBDBD',
+                    textDecoration: 'none',
+                    fontFamily: font,
+                    letterSpacing: '0.05em',
+                    borderBottom: isActive ? '2px solid #111' : '2px solid transparent',
+                    transition: 'color 0.15s',
+                  }}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+            <Link
+              href="/"
+              style={{
+                padding: '10px 20px 12px',
+                fontSize: '12px',
+                fontWeight: 400,
+                color: '#BDBDBD',
+                textDecoration: 'none',
+                fontFamily: font,
+                letterSpacing: '0.05em',
+                borderBottom: '2px solid transparent',
+                transition: 'color 0.15s',
+              }}
+            >
+              BACK TO LIBRARY
+            </Link>
+          </nav>
         </div>
+      </header>
 
-        <nav className="flex-1 flex flex-col">
-          <SidebarLink href="/admin" label="OVERVIEW" />
-          <SidebarLink href="/admin/upload" label="UPLOAD" />
-          <SidebarLink href="/admin/manage" label="MANAGE" />
-        </nav>
-
-        <div className="border-top-heavy">
-          <Link
-            href="/"
-            className="flex items-center px-4 py-3 nav-label text-[10px] text-[#808080] hover:bg-black hover:text-white transition-colors border-bottom-heavy"
-          >
-            ← FRONT END
-          </Link>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div className="flex-1 overflow-auto">
+      {/* Content */}
+      <main>
         {children}
-      </div>
+      </main>
     </div>
-  )
-}
-
-function SidebarLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="border-bottom-heavy px-4 py-3 nav-label text-[10px] hover:bg-black hover:text-white transition-colors"
-    >
-      {label}
-    </Link>
   )
 }

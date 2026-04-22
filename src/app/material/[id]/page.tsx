@@ -1,6 +1,10 @@
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
+
+function isVideoUrl(url: string) {
+  return /\.(mp4|webm|mov)(\?|$)/i.test(url)
+}
 import { getMaterialById, getMaterials } from '@/lib/supabase/server-queries'
 import { TagDimension } from '@/types'
 
@@ -67,17 +71,29 @@ export default async function MaterialDetailPage({ params }: Props) {
       {/* Main content */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '64px', padding: '56px 48px 80px', maxWidth: '1400px', margin: '0 auto' }}>
 
-        {/* Image */}
+        {/* Media */}
         <div style={{ background: '#f7f7f7' }}>
-          <Image
-            src={material.image_url}
-            alt={material.title}
-            width={900}
-            height={700}
-            style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }}
-            unoptimized
-            priority
-          />
+          {isVideoUrl(material.image_url) ? (
+            <video
+              src={material.image_url}
+              controls
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{ width: '100%', height: 'auto', display: 'block' }}
+            />
+          ) : (
+            <Image
+              src={material.image_url}
+              alt={material.title}
+              width={900}
+              height={700}
+              style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }}
+              unoptimized
+              priority
+            />
+          )}
         </div>
 
         {/* Info */}
@@ -117,6 +133,14 @@ export default async function MaterialDetailPage({ params }: Props) {
               )
             })}
 
+            {/* Author */}
+            {material.author && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#f7f7f7', borderRadius: '2px', marginTop: '8px' }}>
+                <span style={{ fontSize: '10px', color: '#999', whiteSpace: 'nowrap', letterSpacing: '0.05em' }}>由 TA 推荐</span>
+                <span style={{ fontSize: '13px', color: '#111', fontWeight: 600, letterSpacing: '0.02em' }}>{material.author}</span>
+              </div>
+            )}
+
             {/* Source */}
             {(material.source_platform || material.source_url) && (
               <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr', gap: '8px', alignItems: 'start', paddingTop: '12px', borderTop: '1px solid #f0f0f0', marginTop: '4px' }}>
@@ -145,7 +169,7 @@ export default async function MaterialDetailPage({ params }: Props) {
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '32px' }}>
             <div>
               <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111', letterSpacing: '-0.02em' }}>
-                Read more
+                MORE
               </h2>
               {related6.length > 0 && (
                 <p style={{ fontSize: '11px', color: '#bbb', marginTop: '4px' }}>
@@ -159,14 +183,25 @@ export default async function MaterialDetailPage({ params }: Props) {
             {more.slice(0, 12).map(m => (
               <Link key={m.id} href={`/material/${m.id}`} style={{ textDecoration: 'none' }}>
                 <div style={{ background: '#f5f5f5', aspectRatio: '1', overflow: 'hidden', marginBottom: '8px' }}>
-                  <Image
-                    src={m.image_url}
-                    alt={m.title}
-                    width={240}
-                    height={240}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    unoptimized
-                  />
+                  {isVideoUrl(m.image_url) ? (
+                    <video
+                      src={m.image_url}
+                      muted
+                      autoPlay
+                      loop
+                      playsInline
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  ) : (
+                    <Image
+                      src={m.image_url}
+                      alt={m.title}
+                      width={240}
+                      height={240}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      unoptimized
+                    />
+                  )}
                 </div>
                 <p style={{ fontSize: '11px', color: '#111', fontWeight: 500, lineHeight: 1.4, margin: 0 }}>
                   {m.title}
