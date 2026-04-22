@@ -182,18 +182,22 @@ export async function toggleFeatured(id: string, value: boolean) {
 }
 
 export async function uploadImage(file: File, hash?: string): Promise<string> {
-  const formData = new FormData()
-  formData.append('file', file)
-  if (hash) formData.append('hash', hash)
+  const supabase = createClient()
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  // Use hash as filename for deduplication (same file → same URL)
+  const key = hash ? `${hash}.${ext}` : `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
-  const res = await fetch('/api/upload', {
-    method: 'POST',
-    body: formData,
-  })
+  const { data, error } = await supabase.storage
+    .from('materials')
+    .upload(key, file, { upsert: true, contentType: file.type })
 
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || '上传失败')
-  return data.url
+  if (error) throw new Error(error.message)
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('materials')
+    .getPublicUrl(data.path)
+
+  return publicUrl
 }
 
 export async function createTag(tag: { name: string; slug: string; dimension: string; color?: string }) {
