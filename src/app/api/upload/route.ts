@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as qiniu from 'qiniu'
 
+type QiniuUploadBody = {
+  key?: string
+  error?: string
+}
+
+type QiniuUploadInfo = {
+  statusCode: number
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '上传失败'
+}
+
 export async function POST(req: NextRequest) {
   const accessKey = process.env.QINIU_ACCESS_KEY
   const secretKey = process.env.QINIU_SECRET_KEY
@@ -31,23 +44,24 @@ export async function POST(req: NextRequest) {
     // Upload to Qiniu
     const config = new qiniu.conf.Config()
     // 华东区域
-    ;(config as any).zone = qiniu.zone.Zone_z0
+    config.zone = qiniu.zone.Zone_z0
 
     const formUploader = new qiniu.form_up.FormUploader(config)
     const putExtra = new qiniu.form_up.PutExtra()
 
     const result = await new Promise<{ key: string }>((resolve, reject) => {
-      formUploader.put(token, key, buffer, putExtra, (err: any, body: any, info: any) => {
+      formUploader.put(token, key, buffer, putExtra, (err: Error | undefined, body: QiniuUploadBody, info: QiniuUploadInfo) => {
         if (err) return reject(err)
         if (info.statusCode !== 200) return reject(new Error(body.error || '上传失败'))
-        resolve(body)
+        if (!body.key) return reject(new Error('上传结果缺少文件 Key'))
+        resolve({ key: body.key })
       })
     })
 
     const publicUrl = `https://${domain}/${result.key}`
     return NextResponse.json({ url: publicUrl })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Qiniu upload error:', err)
-    return NextResponse.json({ error: err.message || '上传失败' }, { status: 500 })
+    return NextResponse.json({ error: getErrorMessage(err) }, { status: 500 })
   }
 }

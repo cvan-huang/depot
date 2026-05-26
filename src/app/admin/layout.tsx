@@ -17,8 +17,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div style={{ minHeight: '100vh', background: '#fff', fontFamily: font }}>
       {/* Header */}
-      <header style={{ padding: '36px 48px 0', borderBottom: '1px solid #e8e8e8' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+      <header className="admin-header" style={{ padding: '36px 48px 0', borderBottom: '1px solid #e8e8e8' }}>
+        <div className="admin-header-row" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
 
           {/* Title */}
           <Link href="/admin" style={{ textDecoration: 'none' }}>
@@ -35,7 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
 
           {/* Nav tabs */}
-          <nav style={{ display: 'flex', alignItems: 'flex-end', gap: '0' }}>
+          <nav className="admin-nav" style={{ display: 'flex', alignItems: 'flex-end', gap: '0' }}>
             {NAV.map(item => {
               const isActive = item.exact
                 ? pathname === item.href
@@ -76,6 +76,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             >
               BACK TO LIBRARY
             </Link>
+            <form action="/api/admin/logout" method="post">
+              <button
+                type="submit"
+                style={{
+                  padding: '10px 0 12px 20px',
+                  fontSize: '12px',
+                  fontWeight: 400,
+                  color: '#BDBDBD',
+                  background: 'transparent',
+                  border: 'none',
+                  fontFamily: font,
+                  letterSpacing: '0.05em',
+                  cursor: 'pointer',
+                }}
+              >
+                LOG OUT
+              </button>
+            </form>
           </nav>
         </div>
       </header>

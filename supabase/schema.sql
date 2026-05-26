@@ -8,6 +8,16 @@ create table if not exists tags (
   created_at timestamptz default now()
 );
 
+-- Projects table
+create table if not exists projects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text not null unique,
+  description text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 -- Materials table
 create table if not exists materials (
   id uuid primary key default gen_random_uuid(),
@@ -17,9 +27,16 @@ create table if not exists materials (
   source_url text,
   source_platform text,
   author text,
+  image_hash text,
+  project_id uuid references projects(id) on delete set null,
   is_featured boolean default false,
   created_at timestamptz default now()
 );
+
+alter table materials add column if not exists project_id uuid references projects(id) on delete set null;
+
+create index if not exists materials_image_hash_idx on materials(image_hash);
+create index if not exists materials_project_id_idx on materials(project_id);
 
 -- Junction table
 create table if not exists material_tags (
@@ -30,11 +47,13 @@ create table if not exists material_tags (
 
 -- Enable RLS
 alter table tags enable row level security;
+alter table projects enable row level security;
 alter table materials enable row level security;
 alter table material_tags enable row level security;
 
 -- Public read access
 create policy "Public read tags" on tags for select using (true);
+create policy "Public read projects" on projects for select using (true);
 create policy "Public read materials" on materials for select using (true);
 create policy "Public read material_tags" on material_tags for select using (true);
 
@@ -42,6 +61,10 @@ create policy "Public read material_tags" on material_tags for select using (tru
 create policy "Admin insert tags" on tags for insert with check (auth.role() = 'authenticated');
 create policy "Admin update tags" on tags for update using (auth.role() = 'authenticated');
 create policy "Admin delete tags" on tags for delete using (auth.role() = 'authenticated');
+
+create policy "Admin insert projects" on projects for insert with check (auth.role() = 'authenticated');
+create policy "Admin update projects" on projects for update using (auth.role() = 'authenticated');
+create policy "Admin delete projects" on projects for delete using (auth.role() = 'authenticated');
 
 create policy "Admin insert materials" on materials for insert with check (auth.role() = 'authenticated');
 create policy "Admin update materials" on materials for update using (auth.role() = 'authenticated');

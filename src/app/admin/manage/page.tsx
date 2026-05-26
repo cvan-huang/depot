@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { MaterialWithTags, Tag } from '@/types'
-import { cn } from '@/lib/utils'
+import { MaterialWithTags, Project, Tag } from '@/types'
 
 const DIM_LABELS = { scene: '场景', style: '风格', element: '元素' } as const
 
@@ -17,33 +16,27 @@ export default function ManagePage() {
   const [showBulkConfirm, setShowBulkConfirm] = useState(false)
   const [editItem, setEditItem] = useState<MaterialWithTags | null>(null)
   const [editForm, setEditForm] = useState({ title: '', description: '', source_url: '', source_platform: '', author: '' })
+  const [editProjectName, setEditProjectName] = useState('')
   const [editTags, setEditTags] = useState<string[]>([])
   const [allTags, setAllTags] = useState<Tag[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    import('@/lib/supabase/queries').then(({ getMaterials, getAllTags }) => {
-      Promise.all([getMaterials(), getAllTags()]).then(([data, tags]) => {
+    import('@/lib/supabase/queries').then(({ getMaterials, getAllTags, getProjects }) => {
+      Promise.all([getMaterials(), getAllTags(), getProjects()]).then(([data, tags, projectData]) => {
         setMaterials(data)
         setAllTags(tags)
+        setProjects(projectData)
         setLoading(false)
       })
     })
   }, [])
 
   const filtered = materials.filter(m =>
-    m.title.toLowerCase().includes(search.toLowerCase())
+    m.title.toLowerCase().includes(search.toLowerCase()) ||
+    (m.project?.name || '').toLowerCase().includes(search.toLowerCase())
   )
-
-  const handleToggleFeatured = async (id: string, current: boolean) => {
-    setMaterials(prev => prev.map(m => m.id === id ? { ...m, is_featured: !m.is_featured } : m))
-    try {
-      const { toggleFeatured } = await import('@/lib/supabase/queries')
-      await toggleFeatured(id, !current)
-    } catch {
-      setMaterials(prev => prev.map(m => m.id === id ? { ...m, is_featured: current } : m))
-    }
-  }
 
   const handleDelete = async (id: string) => {
     setMaterials(prev => prev.filter(m => m.id !== id))
@@ -77,7 +70,11 @@ export default function ManagePage() {
   const toggleSelect = (id: string) => {
     setSelected(prev => {
       const s = new Set(prev)
-      s.has(id) ? s.delete(id) : s.add(id)
+      if (s.has(id)) {
+        s.delete(id)
+      } else {
+        s.add(id)
+      }
       return s
     })
   }
@@ -94,8 +91,9 @@ export default function ManagePage() {
       description: m.description || '',
       source_url: m.source_url || '',
       source_platform: m.source_platform || '',
-      author: (m as any).author || '',
+      author: m.author || '',
     })
+    setEditProjectName(m.project?.name || '')
     setEditTags((m.tags || []).map(t => t.id))
   }
 
@@ -107,16 +105,26 @@ export default function ManagePage() {
     if (!editItem) return
     setSaving(true)
     try {
-      const { updateMaterial, updateMaterialTags } = await import('@/lib/supabase/queries')
+      const { getOrCreateProject, getProjects, updateMaterial, updateMaterialTags } = await import('@/lib/supabase/queries')
+      const project = editProjectName.trim()
+        ? await getOrCreateProject(editProjectName)
+        : null
       await Promise.all([
-        updateMaterial(editItem.id, editForm),
+        updateMaterial(editItem.id, { ...editForm, project_id: project?.id || null }),
         updateMaterialTags(editItem.id, editTags),
       ])
       const updatedTags = allTags.filter(t => editTags.includes(t.id))
-      setMaterials(prev => prev.map(m => m.id === editItem.id ? { ...m, ...editForm, tags: updatedTags } : m))
+      setMaterials(prev => prev.map(m => m.id === editItem.id ? {
+        ...m,
+        ...editForm,
+        project_id: project?.id,
+        project,
+        tags: updatedTags,
+      } : m))
+      setProjects(await getProjects())
       setEditItem(null)
-    } catch (e: any) {
-      alert(e.message)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : '保存失败')
     }
     setSaving(false)
   }
@@ -126,7 +134,7 @@ export default function ManagePage() {
   return (
     <div style={{ fontFamily: font }}>
       {/* Header */}
-      <div style={{ padding: '32px 40px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="manage-header" style={{ padding: '32px 40px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ fontSize: '32px', fontWeight: 700, letterSpacing: '-0.02em', color: '#111' }}>管理素材</h1>
           <p style={{ fontSize: '12px', color: '#BDBDBD', marginTop: '4px' }}>
@@ -134,7 +142,7 @@ export default function ManagePage() {
             {selected.size > 0 && <span style={{ color: '#FF2442', marginLeft: '8px' }}>· 已选 {selected.size} 个</span>}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="manage-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {selected.size > 0 && (
             <button
               onClick={() => setShowBulkConfirm(true)}
@@ -155,10 +163,11 @@ export default function ManagePage() {
       </div>
 
       {/* Table header */}
-      <div style={{ display: 'grid', gridTemplateColumns: '40px 72px 1fr 1fr 80px', gap: '16px', padding: '12px 40px', borderBottom: '1px solid #EBEBEB', background: '#FAFAFA' }}>
+      <div className="manage-row manage-row-head" style={{ display: 'grid', gridTemplateColumns: '40px 72px 1fr 140px 1fr 80px', gap: '16px', padding: '12px 40px', borderBottom: '1px solid #EBEBEB', background: '#FAFAFA' }}>
         <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleSelectAll} style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: '#111' }} />
         <span style={{ fontSize: '11px', color: '#BDBDBD' }}>封面</span>
         <span style={{ fontSize: '11px', color: '#BDBDBD' }}>标题</span>
+        <span style={{ fontSize: '11px', color: '#BDBDBD' }}>项目</span>
         <span style={{ fontSize: '11px', color: '#BDBDBD' }}>标签</span>
         <span style={{ fontSize: '11px', color: '#BDBDBD' }}>操作</span>
       </div>
@@ -170,9 +179,10 @@ export default function ManagePage() {
       {!loading && filtered.map(m => (
         <div
           key={m.id}
+          className="manage-row"
           style={{
             display: 'grid',
-            gridTemplateColumns: '40px 72px 1fr 1fr 80px',
+            gridTemplateColumns: '40px 72px 1fr 140px 1fr 80px',
             gap: '16px',
             padding: '16px 40px',
             borderBottom: '1px solid #F0F0F0',
@@ -189,6 +199,16 @@ export default function ManagePage() {
           <div style={{ minWidth: 0 }}>
             <p style={{ fontSize: '13px', fontWeight: 600, color: '#111', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{m.title}</p>
             {m.description && <p style={{ fontSize: '11px', color: '#BDBDBD', marginTop: '2px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{m.description}</p>}
+          </div>
+
+          <div style={{ minWidth: 0 }}>
+            {m.project ? (
+              <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', backgroundColor: '#FFF0F3', color: '#FF2442', display: 'inline-block', maxWidth: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                {m.project.name}
+              </span>
+            ) : (
+              <span style={{ fontSize: '11px', color: '#BDBDBD' }}>未归属</span>
+            )}
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -218,7 +238,7 @@ export default function ManagePage() {
       {/* Bulk delete confirm */}
       {showBulkConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ background: '#fff', padding: '32px', width: '360px', fontFamily: font }}>
+          <div className="admin-modal-panel" style={{ background: '#fff', padding: '32px', width: '360px', fontFamily: font }}>
             <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>删除 {selected.size} 个素材？</h3>
             <p style={{ fontSize: '12px', color: '#BDBDBD', marginBottom: '24px' }}>此操作不可恢复。</p>
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -232,7 +252,7 @@ export default function ManagePage() {
       {/* Edit modal */}
       {editItem && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ background: '#fff', padding: '32px', width: '480px', maxHeight: '80vh', overflowY: 'auto', fontFamily: font }}>
+          <div className="admin-modal-panel" style={{ background: '#fff', padding: '32px', width: '480px', maxHeight: '80vh', overflowY: 'auto', fontFamily: font }}>
             <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>编辑素材</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {([
@@ -250,6 +270,22 @@ export default function ManagePage() {
                   />
                 </div>
               ))}
+
+              <div>
+                <label style={{ fontSize: '11px', color: '#BDBDBD', display: 'block', marginBottom: '6px' }}>项目</label>
+                <input
+                  value={editProjectName}
+                  list="manage-project-options"
+                  onChange={e => setEditProjectName(e.target.value)}
+                  placeholder="选择已有项目 / 输入新项目名"
+                  style={{ width: '100%', height: '36px', padding: '0 10px', border: '1px solid #EBEBEB', fontSize: '13px', outline: 'none', fontFamily: font, background: '#FAFAFA' }}
+                />
+                <datalist id="manage-project-options">
+                  {projects.map(project => (
+                    <option key={project.id} value={project.name} />
+                  ))}
+                </datalist>
+              </div>
 
               <div>
                 <label style={{ fontSize: '11px', color: '#BDBDBD', display: 'block', marginBottom: '6px' }}>来源平台</label>
@@ -316,7 +352,7 @@ export default function ManagePage() {
       {/* Delete confirm */}
       {deleteId && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ background: '#fff', padding: '32px', width: '360px', fontFamily: font }}>
+          <div className="admin-modal-panel" style={{ background: '#fff', padding: '32px', width: '360px', fontFamily: font }}>
             <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>确认删除？</h3>
             <p style={{ fontSize: '12px', color: '#BDBDBD', marginBottom: '24px' }}>此操作不可恢复。</p>
             <div style={{ display: 'flex', gap: '8px' }}>

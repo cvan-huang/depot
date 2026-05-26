@@ -17,7 +17,7 @@ function groupByAuthorAndDay(materials: MaterialWithTags[]): ActivityGroup[] {
   const map = new Map<string, MaterialWithTags[]>()
 
   for (const m of materials) {
-    const author = (m as any).author || '未署名'
+    const author = m.author || '未署名'
     const date = new Date(m.created_at)
     const dateKey = date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
     const key = `${author}__${dateKey}`

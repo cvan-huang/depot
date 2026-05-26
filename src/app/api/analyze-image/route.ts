@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
+import { AnalyzeImageResult, Tag, TagDimension, TagSuggestion } from '@/types'
 
 function getProviderConfig() {
   if (process.env.DOUBAO_API_KEY) {
@@ -21,12 +23,80 @@ function getProviderConfig() {
   return null
 }
 
-function isVideoUrl(url: string) {
-  return /\.(mp4|webm|mov)(\?|$)/i.test(url)
-}
-
 function isGifUrl(url: string) {
   return /\.gif(\?|$)/i.test(url)
+}
+
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) return null
+  return createClient(url, key)
+}
+
+async function getExistingTags(): Promise<Tag[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('tags')
+    .select('*')
+    .order('dimension')
+    .order('name')
+
+  if (error) {
+    console.error('analyze-image getExistingTags:', error)
+    return []
+  }
+
+  return (data || []) as Tag[]
+}
+
+function formatTagsForPrompt(tags: Tag[]) {
+  const grouped = tags.reduce<Record<TagDimension, string[]>>((acc, tag) => {
+    acc[tag.dimension].push(tag.name)
+    return acc
+  }, { scene: [], style: [], element: [] })
+
+  return [
+    `场景标签：${grouped.scene.join('、') || '无'}`,
+    `风格标签：${grouped.style.join('、') || '无'}`,
+    `元素标签：${grouped.element.join('、') || '无'}`,
+  ].join('\n')
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function toTagSuggestions(value: unknown): TagSuggestion[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((item): TagSuggestion | null => {
+      if (typeof item === 'string') {
+        const name = item.trim()
+        return name ? { name } : null
+      }
+
+      if (item && typeof item === 'object' && 'name' in item) {
+        const raw = item as { name?: unknown; dimension?: unknown }
+        const name = typeof raw.name === 'string' ? raw.name.trim() : ''
+        const dimension = raw.dimension
+        if (!name) return null
+        if (dimension === 'scene' || dimension === 'style' || dimension === 'element') {
+          return { name, dimension }
+        }
+        return { name }
+      }
+
+      return null
+    })
+    .filter((item): item is TagSuggestion => Boolean(item))
 }
 
 async function toCompressedBase64(imageUrl: string): Promise<string> {
@@ -43,16 +113,21 @@ async function toCompressedBase64(imageUrl: string): Promise<string> {
   return `data:image/jpeg;base64,${compressed.toString('base64')}`
 }
 
-const prompt = `你是一个专业的设计审美分析师。
+function buildPrompt(existingTags: Tag[]) {
+  return `你是一个专业的设计审美分析师。
 
-请分析这张设计参考图，自由生成 8-12 个中文标签，描述其设计风格、视觉元素、使用场景和设计手法。
-要求：标签简洁（2-6个字），专业且具体，避免泛泛而谈。
-示例风格：极简排版、撞色配色、手绘插画、品牌视觉、3D立体感、日系清新、文字海报、几何构成……
+请分析这张设计参考图，生成简洁中文标题、描述，并推荐标签。
 
-同时生成一个简洁的中文标题（10字以内）和一句描述（30字以内），描述这张图的设计亮点。
+现有标签库如下，请优先从中选择最匹配的 5-10 个标签，matchedTags 必须严格使用现有标签名称，不要改写：
+${formatTagsForPrompt(existingTags)}
+
+如果现有标签确实覆盖不了图片特征，最多推荐 3 个新标签候选，放入 newTagCandidates。新标签要求简洁（2-6个字）、专业且具体，并尽量标注 dimension：scene、style 或 element。
+
+标题要求 10 字以内。描述要求 30 字以内，描述设计亮点。
 
 严格按以下 JSON 格式返回，不要有其他文字：
-{"title":"标题","description":"描述","tags":["标签1","标签2","标签3"]}`
+{"title":"标题","description":"描述","matchedTags":["已有标签1","已有标签2"],"newTagCandidates":[{"name":"新标签","dimension":"style"}]}`
+}
 
 export async function POST(req: NextRequest) {
   const provider = getProviderConfig()
@@ -81,11 +156,15 @@ export async function POST(req: NextRequest) {
         .toBuffer()
       imageDataUrl = `data:image/jpeg;base64,${compressed.toString('base64')}`
     }
-  } catch (e: any) {
-    return NextResponse.json({ error: `图片处理失败: ${e.message}` }, { status: 500 })
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : '未知错误'
+    return NextResponse.json({ error: `图片处理失败: ${message}` }, { status: 500 })
   }
 
   try {
+    const existingTags = await getExistingTags()
+    const existingTagNames = new Set(existingTags.map(tag => tag.name.toLowerCase()))
+
     const response = await fetch(provider.baseUrl, {
       method: 'POST',
       headers: {
@@ -99,7 +178,7 @@ export async function POST(req: NextRequest) {
           role: 'user',
           content: [
             { type: 'image_url', image_url: { url: imageDataUrl } },
-            { type: 'text', text: prompt },
+            { type: 'text', text: buildPrompt(existingTags) },
           ],
         }],
       }),
@@ -120,11 +199,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `AI 返回格式异常: ${content.slice(0, 100)}` }, { status: 500 })
     }
 
-    const result = JSON.parse(jsonMatch[0])
+    const rawResult = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+    const matchedTags = toStringArray(rawResult.matchedTags ?? rawResult.tags)
+      .filter(name => existingTagNames.has(name.toLowerCase()))
+    const seenMatched = new Set(matchedTags.map(name => name.toLowerCase()))
+    const newTagCandidates = toTagSuggestions(rawResult.newTagCandidates)
+      .filter(tag => !existingTagNames.has(tag.name.toLowerCase()))
+      .filter(tag => !seenMatched.has(tag.name.toLowerCase()))
+      .slice(0, 3)
+
+    const result: AnalyzeImageResult = {
+      title: typeof rawResult.title === 'string' ? rawResult.title : '',
+      description: typeof rawResult.description === 'string' ? rawResult.description : '',
+      matchedTags,
+      newTagCandidates,
+    }
+
     // Tell client to auto-add "动态" tag for animated formats
     if (animated) result._animated = true
     return NextResponse.json(result)
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || '分析失败' }, { status: 500 })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : '分析失败'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -1,5 +1,51 @@
 import { createClient } from './client'
-import { MaterialWithTags, Tag } from '@/types'
+import { MaterialPageResult, MaterialWithTags, Project, Tag, TagDimension } from '@/types'
+
+type MaterialTagJoin = { tag: Tag | null }
+type MaterialProjectRow = Omit<MaterialWithTags, 'tags' | 'project'> & {
+  tags?: MaterialTagJoin[]
+  project?: Project | null
+}
+
+function flattenMaterialRows(rows: MaterialProjectRow[] | null): MaterialWithTags[] {
+  return (rows || []).map((m) => ({
+    ...m,
+    tags: (m.tags || []).map(t => t.tag).filter((tag): tag is Tag => Boolean(tag)),
+    project: m.project || null,
+  }))
+}
+
+function slugifyProjectName(name: string) {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\u4e00-\u9fa5-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+
+  return slug || `project-${Date.now()}`
+}
+
+function isMissingProjectSchema(error: { code?: string; message?: string } | null) {
+  return Boolean(
+    error &&
+    (error.code === 'PGRST200' ||
+      error.code === 'PGRST205' ||
+      error.message?.includes('projects') ||
+      error.message?.includes('project_id'))
+  )
+}
+
+function getProjectLookupCandidates(value: string) {
+  const candidates = new Set([value])
+  try {
+    candidates.add(decodeURIComponent(value))
+  } catch {
+    // Keep the original value if it is not URI encoded.
+  }
+  return Array.from(candidates).map(candidate => candidate.trim()).filter(Boolean)
+}
 
 export async function getAllTags(): Promise<Tag[]> {
   const supabase = createClient()
@@ -13,19 +59,136 @@ export async function getAllTags(): Promise<Tag[]> {
   return data as Tag[]
 }
 
+export async function getProjects(): Promise<Project[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    if (!isMissingProjectSchema(error)) console.error('getProjects:', error)
+    return []
+  }
+  return data as Project[]
+}
+
+export async function getOrCreateProject(name: string): Promise<Project> {
+  const supabase = createClient()
+  const trimmed = name.trim()
+  if (!trimmed) throw new Error('请输入项目名称')
+
+  const { data: existing } = await supabase
+    .from('projects')
+    .select('*')
+    .ilike('name', trimmed)
+    .maybeSingle()
+
+  if (existing) return existing as Project
+
+  const baseSlug = slugifyProjectName(trimmed)
+  const { data, error } = await supabase
+    .from('projects')
+    .insert({ name: trimmed, slug: baseSlug })
+    .select()
+    .single()
+
+  if (!error) return data as Project
+
+  const { data: fallback, error: fallbackError } = await supabase
+    .from('projects')
+    .insert({ name: trimmed, slug: `${baseSlug}-${Date.now()}` })
+    .select()
+    .single()
+
+  if (fallbackError) throw fallbackError
+  return fallback as Project
+}
+
+export async function getProjectBySlug(slug: string): Promise<Project | null> {
+  const supabase = createClient()
+
+  for (const candidate of getProjectLookupCandidates(slug)) {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('slug', candidate)
+      .maybeSingle()
+
+    if (error) {
+      if (!isMissingProjectSchema(error)) console.error('getProjectBySlug:', error)
+      return null
+    }
+    if (data) return data as Project
+  }
+
+  for (const candidate of getProjectLookupCandidates(slug)) {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('name', candidate)
+      .maybeSingle()
+
+    if (error) {
+      if (!isMissingProjectSchema(error)) console.error('getProjectByName:', error)
+      return null
+    }
+    if (data) return data as Project
+  }
+
+  return null
+}
+
+async function getMaterialIdsForTagFilter(options?: {
+  dimension?: string
+  tagSlug?: string
+}) {
+  if (!options?.dimension && !options?.tagSlug) return null
+
+  const supabase = createClient()
+  let tagsQuery = supabase.from('tags').select('id')
+
+  if (options.tagSlug) {
+    tagsQuery = tagsQuery.eq('slug', options.tagSlug)
+  } else if (options.dimension) {
+    tagsQuery = tagsQuery.eq('dimension', options.dimension)
+  }
+
+  const { data: tags, error: tagsError } = await tagsQuery
+  if (tagsError) { console.error('getMaterialIdsForTagFilter tags:', tagsError); return [] }
+
+  const tagIds = (tags || []).map(tag => tag.id)
+  if (tagIds.length === 0) return []
+
+  const { data: joins, error: joinError } = await supabase
+    .from('material_tags')
+    .select('material_id')
+    .in('tag_id', tagIds)
+
+  if (joinError) { console.error('getMaterialIdsForTagFilter joins:', joinError); return [] }
+
+  return Array.from(new Set((joins || []).map(row => row.material_id).filter(Boolean)))
+}
+
 export async function getMaterials(options?: {
   dimension?: string
   tagSlug?: string
   search?: string
   featuredOnly?: boolean
   limit?: number
+  offset?: number
+  projectId?: string
+  projectIds?: string[]
 }): Promise<MaterialWithTags[]> {
   const supabase = createClient()
+  const materialIds = await getMaterialIdsForTagFilter(options)
+  if (materialIds && materialIds.length === 0) return []
 
   let query = supabase
     .from('materials')
     .select(`
       *,
+      project:projects(*),
       tags:material_tags(
         tag:tags(*)
       )
@@ -37,32 +200,141 @@ export async function getMaterials(options?: {
   }
 
   if (options?.limit) {
-    query = query.limit(options.limit)
+    const from = options.offset || 0
+    query = query.range(from, from + options.limit - 1)
+  }
+
+  if (options?.projectId) {
+    query = query.eq('project_id', options.projectId)
+  }
+
+  if (options?.projectIds?.length) {
+    query = query.in('project_id', options.projectIds)
+  }
+
+  if (materialIds) {
+    query = query.in('id', materialIds)
   }
 
   if (options?.search) {
     query = query.textSearch('search_vector', options.search, { type: 'plain' })
   }
 
-  const { data, error } = await query
+  let { data, error } = await query
+
+  if (error) {
+    if (!isMissingProjectSchema(error)) {
+      console.warn('getMaterials with project relation failed, falling back:', error)
+    }
+    let fallback = supabase
+      .from('materials')
+      .select(`
+        *,
+        tags:material_tags(
+          tag:tags(*)
+        )
+      `)
+      .order('created_at', { ascending: false })
+
+    if (options?.featuredOnly) fallback = fallback.eq('is_featured', true)
+    if (options?.limit) {
+      const from = options.offset || 0
+      fallback = fallback.range(from, from + options.limit - 1)
+    }
+    if (options?.projectId) fallback = fallback.eq('project_id', options.projectId)
+    if (options?.projectIds?.length) fallback = fallback.in('project_id', options.projectIds)
+    if (materialIds) fallback = fallback.in('id', materialIds)
+    if (options?.search) fallback = fallback.textSearch('search_vector', options.search, { type: 'plain' })
+
+    const fallbackResult = await fallback
+    data = fallbackResult.data as MaterialProjectRow[] | null
+    error = fallbackResult.error
+  }
 
   if (error) { console.error('getMaterials:', error); return [] }
 
-  // Flatten the nested join structure
-  let materials = (data || []).map((m: any) => ({
-    ...m,
-    tags: (m.tags || []).map((t: any) => t.tag).filter(Boolean),
-  })) as MaterialWithTags[]
-
-  // Filter by specific tag first
-  if (options?.tagSlug) {
-    materials = materials.filter(m => m.tags.some((t: Tag) => t.slug === options.tagSlug))
-  } else if (options?.dimension) {
-    // Filter by dimension: show materials that have at least one tag in this dimension
-    materials = materials.filter(m => m.tags.some((t: Tag) => t.dimension === options.dimension))
-  }
+  const materials = flattenMaterialRows(data as MaterialProjectRow[] | null)
 
   return materials
+}
+
+export async function getMaterialsPage(options?: {
+  dimension?: string
+  tagSlug?: string
+  search?: string
+  featuredOnly?: boolean
+  limit?: number
+  offset?: number
+  projectId?: string
+  projectIds?: string[]
+}): Promise<MaterialPageResult> {
+  const supabase = createClient()
+  const limit = options?.limit || 60
+  const offset = options?.offset || 0
+  const materialIds = await getMaterialIdsForTagFilter(options)
+  if (materialIds && materialIds.length === 0) {
+    return { materials: [], total: 0, hasMore: false }
+  }
+
+  let query = supabase
+    .from('materials')
+    .select(`
+      *,
+      project:projects(*),
+      tags:material_tags(
+        tag:tags(*)
+      )
+    `, { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (options?.featuredOnly) query = query.eq('is_featured', true)
+  if (options?.projectId) query = query.eq('project_id', options.projectId)
+  if (options?.projectIds?.length) query = query.in('project_id', options.projectIds)
+  if (materialIds) query = query.in('id', materialIds)
+  if (options?.search) query = query.textSearch('search_vector', options.search, { type: 'plain' })
+
+  let { data, error, count } = await query
+
+  if (error) {
+    if (!isMissingProjectSchema(error)) {
+      console.warn('getMaterialsPage with project relation failed, falling back:', error)
+    }
+    let fallback = supabase
+      .from('materials')
+      .select(`
+        *,
+        tags:material_tags(
+          tag:tags(*)
+        )
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (options?.featuredOnly) fallback = fallback.eq('is_featured', true)
+    if (options?.projectId) fallback = fallback.eq('project_id', options.projectId)
+    if (options?.projectIds?.length) fallback = fallback.in('project_id', options.projectIds)
+    if (materialIds) fallback = fallback.in('id', materialIds)
+    if (options?.search) fallback = fallback.textSearch('search_vector', options.search, { type: 'plain' })
+
+    const fallbackResult = await fallback
+    data = fallbackResult.data as MaterialProjectRow[] | null
+    error = fallbackResult.error
+    count = fallbackResult.count
+  }
+
+  if (error) {
+    console.error('getMaterialsPage:', error)
+    return { materials: [], total: 0, hasMore: false }
+  }
+
+  const materials = flattenMaterialRows(data as MaterialProjectRow[] | null)
+  const total = count ?? null
+  return {
+    materials,
+    total,
+    hasMore: total === null ? materials.length === limit : offset + materials.length < total,
+  }
 }
 
 export async function getMaterialById(id: string): Promise<MaterialWithTags | null> {
@@ -72,6 +344,7 @@ export async function getMaterialById(id: string): Promise<MaterialWithTags | nu
     .from('materials')
     .select(`
       *,
+      project:projects(*),
       tags:material_tags(
         tag:tags(*)
       )
@@ -79,12 +352,26 @@ export async function getMaterialById(id: string): Promise<MaterialWithTags | nu
     .eq('id', id)
     .single()
 
-  if (error) { console.error('getMaterialById:', error); return null }
+  if (error) {
+    if (!isMissingProjectSchema(error)) {
+      console.warn('getMaterialById with project relation failed, falling back:', error)
+    }
+    const fallback = await supabase
+      .from('materials')
+      .select(`
+        *,
+        tags:material_tags(
+          tag:tags(*)
+        )
+      `)
+      .eq('id', id)
+      .single()
 
-  return {
-    ...data,
-    tags: (data.tags || []).map((t: any) => t.tag).filter(Boolean),
-  } as MaterialWithTags
+    if (fallback.error) { console.error('getMaterialById:', fallback.error); return null }
+    return flattenMaterialRows([fallback.data as MaterialProjectRow])[0]
+  }
+
+  return flattenMaterialRows([data as MaterialProjectRow])[0]
 }
 
 export async function findMaterialByHash(hash: string): Promise<boolean> {
@@ -114,6 +401,7 @@ export async function createMaterial(material: {
   source_platform?: string
   author?: string
   image_hash?: string
+  project_id?: string
   is_featured?: boolean
   tagIds?: string[]
 }) {
@@ -146,6 +434,7 @@ export async function updateMaterial(id: string, updates: {
   source_url?: string
   source_platform?: string
   author?: string
+  project_id?: string | null
 }) {
   const supabase = createClient()
   const { error } = await supabase.from('materials').update(updates).eq('id', id)
@@ -207,7 +496,7 @@ export async function createTag(tag: { name: string; slug: string; dimension: st
   return data
 }
 
-export async function getOrCreateTag(name: string): Promise<Tag> {
+export async function getOrCreateTag(name: string, dimension: TagDimension = 'element'): Promise<Tag> {
   const supabase = createClient()
   const trimmed = name.trim()
 
@@ -224,7 +513,7 @@ export async function getOrCreateTag(name: string): Promise<Tag> {
   const slug = `${trimmed.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fa5-]/g, '')}-${Date.now()}`
   const { data, error } = await supabase
     .from('tags')
-    .insert({ name: trimmed, slug, dimension: 'element' })
+    .insert({ name: trimmed, slug, dimension })
     .select()
     .single()
 

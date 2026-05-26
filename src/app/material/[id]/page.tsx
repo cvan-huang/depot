@@ -62,14 +62,14 @@ export default async function MaterialDetailPage({ params }: Props) {
     <div style={{ minHeight: '100vh', background: '#fff', fontFamily: font }}>
 
       {/* Top nav — back only */}
-      <header style={{ borderBottom: '1px solid #e8e8e8', padding: '16px 48px' }}>
+      <header className="page-shell-pad" style={{ borderBottom: '1px solid #e8e8e8', padding: '16px 48px' }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#aaa', fontSize: '12px', fontFamily: font }}>
           ← 返回
         </Link>
       </header>
 
       {/* Main content */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '64px', padding: '56px 48px 80px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div className="material-detail-layout page-shell-pad" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '64px', padding: '56px 48px 80px', maxWidth: '1400px', margin: '0 auto' }}>
 
         {/* Media */}
         <div style={{ background: '#f7f7f7' }}>
@@ -97,7 +97,7 @@ export default async function MaterialDetailPage({ params }: Props) {
         </div>
 
         {/* Info */}
-        <div style={{ paddingTop: '8px' }}>
+        <div className="material-detail-info" style={{ paddingTop: '8px' }}>
           <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111', lineHeight: 1.2, letterSpacing: '-0.01em', marginBottom: '12px' }}>
             {material.title}
           </h1>
@@ -134,6 +134,19 @@ export default async function MaterialDetailPage({ params }: Props) {
             })}
 
             {/* Author */}
+            {material.project && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#fff5f7', borderRadius: '2px', marginTop: '8px' }}>
+                <span style={{ fontSize: '10px', color: '#FF2442', whiteSpace: 'nowrap', letterSpacing: '0.05em' }}>项目</span>
+                <Link
+                  href={`/project/${material.project.slug}`}
+                  style={{ fontSize: '13px', color: '#111', fontWeight: 600, letterSpacing: '0.02em', textDecoration: 'none' }}
+                >
+                  {material.project.name}
+                </Link>
+              </div>
+            )}
+
+            {/* Author */}
             {material.author && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#f7f7f7', borderRadius: '2px', marginTop: '8px' }}>
                 <span style={{ fontSize: '10px', color: '#999', whiteSpace: 'nowrap', letterSpacing: '0.05em' }}>由 TA 推荐</span>
@@ -165,7 +178,7 @@ export default async function MaterialDetailPage({ params }: Props) {
 
       {/* More materials */}
       {more.length > 0 && (
-        <div style={{ padding: '0 48px 80px', maxWidth: '1400px', margin: '0 auto' }}>
+        <div className="page-shell-pad" style={{ padding: '0 48px 80px', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '32px' }}>
             <div>
               <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111', letterSpacing: '-0.02em' }}>
@@ -179,7 +192,7 @@ export default async function MaterialDetailPage({ params }: Props) {
             </div>
             <span style={{ fontSize: '28px', color: '#ccc', fontWeight: 300 }}>{more.length}</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '16px' }}>
+          <div className="related-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '16px' }}>
             {more.slice(0, 12).map(m => (
               <Link key={m.id} href={`/material/${m.id}`} style={{ textDecoration: 'none' }}>
                 <div style={{ background: '#f5f5f5', aspectRatio: '1', overflow: 'hidden', marginBottom: '8px' }}>
