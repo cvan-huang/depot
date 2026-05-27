@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as qiniu from 'qiniu'
+import { ADMIN_SESSION_COOKIE, isValidAdminSession } from '@/lib/admin-auth'
 
 type QiniuUploadBody = {
   key?: string
@@ -15,6 +16,12 @@ function getErrorMessage(error: unknown) {
 }
 
 export async function POST(req: NextRequest) {
+  const token = req.cookies.get(ADMIN_SESSION_COOKIE)?.value
+  const authed = await isValidAdminSession(token)
+  if (!authed) {
+    return NextResponse.json({ error: '请先登录后台' }, { status: 401 })
+  }
+
   const accessKey = process.env.QINIU_ACCESS_KEY
   const secretKey = process.env.QINIU_SECRET_KEY
   const bucket = process.env.QINIU_BUCKET

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
+import { ADMIN_SESSION_COOKIE, isValidAdminSession } from '@/lib/admin-auth'
 import { AnalyzeImageResult, Tag, TagDimension, TagSuggestion } from '@/types'
 
 function getProviderConfig() {
@@ -130,6 +131,12 @@ ${formatTagsForPrompt(existingTags)}
 }
 
 export async function POST(req: NextRequest) {
+  const token = req.cookies.get(ADMIN_SESSION_COOKIE)?.value
+  const authed = await isValidAdminSession(token)
+  if (!authed) {
+    return NextResponse.json({ error: '请先登录后台' }, { status: 401 })
+  }
+
   const provider = getProviderConfig()
   if (!provider) {
     return NextResponse.json({ error: '未配置 AI API Key' }, { status: 500 })
