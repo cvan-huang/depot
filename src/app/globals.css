@@ -97,6 +97,13 @@ body {
     gap: 18px !important;
   }
 
+  .public-brand-lockup {
+    position: static !important;
+    align-items: flex-start !important;
+    gap: 32px !important;
+    margin-top: 16px !important;
+  }
+
   .public-search {
     margin-top: 42px !important;
     max-width: none !important;

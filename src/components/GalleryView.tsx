@@ -191,30 +191,70 @@ export default function GalleryView() {
     <div style={{ minHeight: '100vh', background: '#fff', fontFamily: font }}>
 
       {/* ─── HEADER ─── */}
-      <header className="public-header" style={{ padding: '36px 48px 30px' }}>
+      <header className="public-header" style={{ padding: '36px 48px 30px', position: 'relative' }}>
         <div className="public-header-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <Link href="/" style={{ textDecoration: 'none' }}>
-            <h1 style={{
-              fontSize: 'clamp(36px, 5.5vw, 80px)',
-              fontWeight: 700,
-              lineHeight: 1.0,
-              letterSpacing: '-0.03em',
-              color: '#111',
-              fontFamily: font,
-            }}>
-              Reference Library
-            </h1>
+            <div style={{ width: 'fit-content' }}>
+              <h1 style={{
+                marginLeft: '-6px',
+                fontSize: 'clamp(112px, 16vw, 224px)',
+                fontWeight: 500,
+                lineHeight: 1.0,
+                letterSpacing: '-0.03em',
+                color: '#111',
+                fontFamily: '"Helvetica Neue", Arial, sans-serif',
+              }}>
+                <span style={{ marginRight: '12px' }}>(</span>
+                <span style={{ position: 'relative', top: '0.07em' }}>0.1</span>
+                )
+              </h1>
+            </div>
           </Link>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/REDesign logo.svg"
-            alt="REDesign"
-            style={{ height: '28px', width: 'auto', marginTop: '10px' }}
-          />
+          <div
+            className="public-brand-lockup"
+            style={{
+              position: 'absolute',
+              top: '87px',
+              right: '48px',
+              width: '280px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: '74px',
+              pointerEvents: 'none',
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/REDesign logo.svg"
+              alt="REDesign"
+              style={{ height: '34px', width: 'auto' }}
+            />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '36px 1fr 36px',
+                alignItems: 'center',
+                width: '100%',
+                minHeight: '76px',
+                color: '#111',
+                fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                fontWeight: 500,
+                lineHeight: 0.95,
+              }}
+            >
+              <span style={{ fontSize: 'clamp(56px, 5vw, 76px)', lineHeight: 0.9, justifySelf: 'start' }}>(</span>
+              <span style={{ fontSize: 'clamp(22px, 2.05vw, 29px)', letterSpacing: '-0.03em', textAlign: 'center', justifySelf: 'center', transform: 'translateY(8px)' }}>
+                <span style={{ display: 'block', whiteSpace: 'nowrap' }}>Visual Reference</span>
+                <span style={{ display: 'block' }}>Library</span>
+              </span>
+              <span style={{ fontSize: 'clamp(56px, 5vw, 76px)', lineHeight: 0.9, justifySelf: 'end' }}>)</span>
+            </div>
+          </div>
         </div>
 
         {/* ─── SEARCH ─── */}
-        <div className="public-search" style={{ marginTop: '74px', maxWidth: '480px' }}>
+        <div className="public-search" style={{ marginTop: '84px', maxWidth: '400px' }}>
           <input
             type="text"
             value={search}
@@ -229,7 +269,7 @@ export default function GalleryView() {
               color: '#111',
               background: '#F5F5F5',
               border: '1px solid #E8E8E8',
-              borderRadius: '6px',
+              borderRadius: '999px',
               outline: 'none',
               boxSizing: 'border-box',
             }}
@@ -386,6 +426,15 @@ function MaterialCard({
   onNavigate: () => void
 }) {
   const isVideo = isVideoUrl(material.image_url)
+  const [mediaLoaded, setMediaLoaded] = useState(false)
+  const mediaStyle = {
+    width: '100%',
+    height: 'auto',
+    display: 'block',
+    opacity: mediaLoaded ? 1 : 0,
+    transition: 'opacity 180ms ease',
+  }
+
   return (
     <div style={{ breakInside: 'avoid', marginBottom: '24px' }}>
       <Link
@@ -407,7 +456,8 @@ function MaterialCard({
               autoPlay
               loop
               playsInline
-              style={{ width: '100%', height: 'auto', display: 'block' }}
+              onLoadedData={() => setMediaLoaded(true)}
+              style={mediaStyle}
             />
           ) : (
             <Image
@@ -415,10 +465,13 @@ function MaterialCard({
               alt={material.title}
               width={400}
               height={300}
-              style={{ width: '100%', height: 'auto', display: 'block' }}
+              style={mediaStyle}
               sizes="(max-width: 1280px) 20vw, 16vw"
               unoptimized
               priority={priority}
+              loading={priority ? 'eager' : 'lazy'}
+              decoding="async"
+              onLoad={() => setMediaLoaded(true)}
             />
           )}
           {material.is_featured && (
